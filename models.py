@@ -13,7 +13,7 @@ type hinting. Design highlights:
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -236,7 +236,11 @@ class ShiftAssignment(db.Model):
         String(64), nullable=False, unique=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, server_default=func.now()
+        DateTime,
+        nullable=False,
+        # Stored naive-UTC (column is not timezone-aware).
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        server_default=func.now(),
     )
     # Set when the day-before reminder has been sent to this (accepted) worker.
     reminder_sent_at: Mapped[datetime | None] = mapped_column(

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hmac
 import os
-import time
 
 from flask import (
     Blueprint,
@@ -20,6 +19,8 @@ from flask import (
     session,
     url_for,
 )
+
+from extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -32,6 +33,7 @@ def _safe_next(target: str | None) -> str:
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if session.get("is_admin"):
         return redirect(_safe_next(request.args.get("next")))
@@ -50,8 +52,7 @@ def login():
             session.permanent = True
             return redirect(_safe_next(request.form.get("next")))
 
-        # Slow down brute-force attempts.
-        time.sleep(1)
+        # Brute-force protection is handled by the rate limit above.
         flash("Incorrect password.", "error")
 
     return render_template("admin/login.html")

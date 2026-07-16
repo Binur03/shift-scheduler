@@ -23,9 +23,14 @@ Dockerfile
 .DS_Store
 
 # Tests & coverage
+tests/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local data
+instance/
+*.db
 
 # Docs
 *.md

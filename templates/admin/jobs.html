@@ -7,6 +7,7 @@
   <h2 class="text-sm font-medium text-slate-700 mb-4">Add job location</h2>
   <form method="post" action="{{ url_for('admin.create_job') }}"
         class="grid grid-cols-1 md:grid-cols-4 gap-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input name="title" placeholder="Title" required
            class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
     <input name="location_address" placeholder="Address" required
@@ -24,6 +25,7 @@
   <div class="bg-white rounded-lg border border-slate-200 p-5">
     <form method="post" action="{{ url_for('admin.update_job', job_id=j.id) }}"
           class="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input name="title" value="{{ j.title }}"
              class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
       <input name="location_address" value="{{ j.location_address }}"
@@ -38,6 +40,7 @@
     </form>
     <form method="post" action="{{ url_for('admin.delete_job', job_id=j.id) }}"
           class="mt-2 text-right" onsubmit="return confirm('Delete this job and its shifts?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <button class="text-red-700 text-sm hover:underline">Delete</button>
     </form>
   </div>

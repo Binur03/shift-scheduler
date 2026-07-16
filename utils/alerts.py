@@ -3,7 +3,10 @@
 `check_understaffed_shifts()` finds open shifts starting between
 ALERT_WINDOW_MIN_HOURS and ALERT_WINDOW_MAX_HOURS from now (default 24-48h)
 that still have fewer accepted workers than required, sends the admin one
-combined WhatsApp alert, and stamps each shift so it is only alerted once.
+templated WhatsApp alert per shift, and stamps each shift so it is only
+alerted once. (Per-shift messages are required because WhatsApp template
+variables cannot contain newlines, so a combined multi-shift body can't be
+expressed as an approved template.)
 
 Intended to be run on a schedule — either via the HTTP endpoint
 POST /tasks/check-staffing (Cloud Scheduler) or the CLI:
@@ -71,34 +74,16 @@ def _find_understaffed(now: datetime, min_hours: int, max_hours: int) -> list[Sh
     return understaffed
 
 
-def _format_alert(shifts: list[Shift]) -> str:
-    lines = [
-        "⚠️ STAFFING ALERT — the following shift(s) start in 24-48h "
-        "and don't have enough workers:",
-        "",
-    ]
-    for s in shifts:
-        shortfall = s.required_headcount - s.accepted_count
-        lines.append(
-            f"• {s.job.title} @ {s.job.location_address}\n"
-            f"  {s.date:%a %d %b} {s.start_time:%H:%M}-{s.end_time:%H:%M} — "
-            f"{s.accepted_count}/{s.required_headcount} confirmed "
-            f"(need {shortfall} more)"
-        )
-    lines.append("")
-    lines.append("Open the dashboard to adjust the schedule or re-dispatch.")
-    return "\n".join(lines)
-
-
 def check_understaffed_shifts(
     now: datetime | None = None,
     service: WhatsAppService | None = None,
 ) -> StaffingCheckResult:
     """Run one sweep; alert the admin about understaffed shifts 24-48h out.
 
-    Each shift is stamped with ``understaffed_alert_sent_at`` after being
-    included in an alert so repeated sweeps (e.g. hourly cron) don't spam
-    the admin about the same shift.
+    Each shift is stamped with ``understaffed_alert_sent_at`` after its alert
+    is sent so repeated sweeps (e.g. hourly cron) don't spam the admin about
+    the same shift. Shifts whose alert failed to send (e.g. unconfigured
+    Twilio) stay unstamped so the next sweep retries them.
     """
     now = now or business_now()
     min_hours = int(os.environ.get("ALERT_WINDOW_MIN_HOURS", 24))
@@ -111,23 +96,27 @@ def check_understaffed_shifts(
         return StaffingCheckResult(checked_window=window, understaffed=0, alerted=0)
 
     service = service or WhatsAppService()
-    sent = service.send_admin_alert(_format_alert(shifts))
-
-    # Stamp regardless of delivery outcome only when actually sent; if the
-    # send failed (e.g. unconfigured), leave shifts unstamped so the next
-    # sweep retries.
     alerted = 0
-    if sent:
-        for shift in shifts:
+    for shift in shifts:
+        sent = service.send_staffing_alert(
+            title=shift.job.title,
+            location_address=shift.job.location_address,
+            work_date=shift.date,
+            start_time=shift.start_time,
+            end_time=shift.end_time,
+            accepted=shift.accepted_count,
+            required=shift.required_headcount,
+        )
+        if sent:
             shift.understaffed_alert_sent_at = now
             alerted += 1
-        db.session.commit()
+    db.session.commit()
 
     logger.info(
-        "Staffing sweep (%s): %d understaffed, alert %s.",
+        "Staffing sweep (%s): %d understaffed, %d alert(s) sent.",
         window,
         len(shifts),
-        "sent" if sent else "NOT sent (check Twilio/admin config)",
+        alerted,
     )
     return StaffingCheckResult(
         checked_window=window, understaffed=len(shifts), alerted=alerted
@@ -166,14 +155,15 @@ def send_shift_reminders(
         starts_at = datetime.combine(shift.date, shift.start_time)
         if not (now <= starts_at <= horizon):
             continue
-        body = (
-            f"Reminder: you're confirmed for {shift.job.title}\n"
-            f"Location: {shift.job.location_address}\n"
-            f"{shift.date:%a %d %b} "
-            f"{shift.start_time:%H:%M}-{shift.end_time:%H:%M}\n\n"
-            "If you can no longer make it, contact your coordinator ASAP."
+        ok = service.send_shift_reminder(
+            assignment.employee.phone_number,
+            title=shift.job.title,
+            location_address=shift.job.location_address,
+            work_date=shift.date,
+            start_time=shift.start_time,
+            end_time=shift.end_time,
         )
-        if service.send_message(assignment.employee.phone_number, body):
+        if ok:
             assignment.reminder_sent_at = now
             sent += 1
 

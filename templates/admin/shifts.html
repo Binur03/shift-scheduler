@@ -13,6 +13,7 @@
   {% else %}
   <form method="post" action="{{ url_for('admin.create_shift') }}"
         class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <select name="job_id" required
             class="border border-slate-300 rounded-md px-3 py-2 text-sm md:col-span-2">
       <option value="" disabled selected>Select a job…</option>
@@ -42,6 +43,7 @@
     active workers via WhatsApp.
   </p>
   <form method="post" action="{{ url_for('admin.dispatch_week') }}" class="flex gap-3 items-center">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input name="week_start" type="date" required value="{{ next_monday }}"
            class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
     <button class="bg-green-700 text-white rounded-md px-4 py-2 text-sm hover:bg-green-800"
@@ -54,6 +56,7 @@
       Schedule repeats? Copy a week's shifts to the following week, then adjust.
     </p>
     <form method="post" action="{{ url_for('admin.copy_week') }}" class="flex gap-3 items-center">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input name="week_start" type="date" required value="{{ this_monday }}"
              class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
       <button class="border border-slate-300 text-slate-700 rounded-md px-4 py-2 text-sm hover:bg-slate-100">

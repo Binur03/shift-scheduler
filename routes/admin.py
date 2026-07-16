@@ -104,6 +104,29 @@ def activate_employee(employee_id: int):
 @admin_bp.route("/employees/<int:employee_id>/delete", methods=["POST"])
 def delete_employee(employee_id: int):
     employee = db.session.get(Employee, employee_id) or abort(404)
+
+    # Deleting cascades to assignments, which would silently drop this worker
+    # from shifts they've already committed to. Force the seats to be freed
+    # explicitly first (which reopens shifts and re-arms alerts).
+    upcoming_accepted = (
+        db.session.query(ShiftAssignment)
+        .join(Shift, Shift.id == ShiftAssignment.shift_id)
+        .filter(
+            ShiftAssignment.employee_id == employee.id,
+            ShiftAssignment.status == AssignmentStatus.accepted,
+            Shift.date >= date.today(),
+        )
+        .count()
+    )
+    if upcoming_accepted:
+        flash(
+            f"{employee.full_name} is confirmed on {upcoming_accepted} upcoming "
+            "shift(s). Remove them from those shifts first (so the seats "
+            "reopen), or deactivate them instead.",
+            "error",
+        )
+        return redirect(url_for("admin.list_employees"))
+
     db.session.delete(employee)
     db.session.commit()
     flash("Employee deleted.", "success")

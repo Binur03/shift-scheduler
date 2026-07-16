@@ -31,18 +31,21 @@ shift-scheduler/
 ├── config.py              # Env-driven config; Cloud SQL pooling
 ├── extensions.py          # Shared SQLAlchemy instance (db)
 ├── models.py              # Employee, Job, Shift, ShiftAssignment
+├── migrations/            # Alembic migrations (flask db upgrade)
 ├── routes/
 │   ├── admin.py           # CRUD + per-shift & weekly dispatch (Blueprint: /admin)
+│   ├── auth.py            # /login + /logout (admin password session)
 │   ├── tasks.py           # /tasks/check-staffing for Cloud Scheduler
 │   └── worker.py          # /accept/<token> + /decline/<token>
 ├── utils/
-│   ├── alerts.py          # 24-48h understaffing sweep
+│   ├── alerts.py          # 24-48h understaffing sweep + reminders
 │   ├── cli.py             # flask admin import-workers / check-staffing
-│   └── sms.py             # Twilio WhatsApp integration + admin alerts
+│   └── sms.py             # Twilio WhatsApp integration (content templates)
 ├── templates/
 │   ├── base.html
-│   ├── admin/{employees,jobs,shifts,shift_detail}.html
+│   ├── admin/{login,employees,jobs,shifts,shift_detail}.html
 │   └── worker/{accept,confirmed,declined,full,closed}.html
+├── tests/                 # pytest smoke suite (python -m pytest tests/)
 ├── requirements.txt
 ├── Dockerfile
 ├── .dockerignore
@@ -54,11 +57,25 @@ shift-scheduler/
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # fill in DB credentials
-export $(grep -v '^#' .env | xargs)
-flask --app app init-db       # create tables (or use Alembic in prod)
+cp .env.example .env          # fill in DB credentials (or DATABASE_URL=sqlite:///local.db)
+flask --app app db upgrade    # create/upgrade tables (Alembic migrations)
 python app.py                 # http://localhost:8080
 ```
+
+Run the tests with `python -m pytest tests/`.
+
+## Database migrations
+
+Schema is managed with Flask-Migrate (Alembic). After changing `models.py`:
+
+```bash
+flask --app app db migrate -m "describe the change"   # generate
+# review the file in migrations/versions/, then:
+flask --app app db upgrade                            # apply
+```
+
+The container runs `flask db upgrade` automatically on startup, so deploying
+a new image also applies its migrations.
 
 ## Concurrency
 
@@ -68,30 +85,64 @@ only commits the acceptance if `accepted_count < required_headcount`. Concurrent
 acceptors serialize on those locks, so a shift can never be over-filled. If full,
 the transaction rolls back and a "Shift Full" view is returned (HTTP 409).
 
-## Deploy to Cloud Run
+## Deploy to Google Cloud Run
+
+One-time setup (replace `YOUR_PROJECT_ID`; region `us-central1` assumed):
+
+```bash
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com sqladmin.googleapis.com \
+  secretmanager.googleapis.com cloudscheduler.googleapis.com \
+  cloudbuild.googleapis.com
+
+# 1. Cloud SQL (MySQL 8) with automated backups
+gcloud sql instances create shift-scheduler-db \
+  --database-version=MYSQL_8_0 --tier=db-f1-micro --region=us-central1 \
+  --backup --backup-start-time=09:00
+gcloud sql databases create shift_scheduler --instance=shift-scheduler-db
+gcloud sql users create app --instance=shift-scheduler-db --password='<DB_PASS>'
+
+# 2. Secrets (generate with: python -c "import secrets; print(secrets.token_urlsafe(32))")
+printf '%s' '<DB_PASS>'         | gcloud secrets create db-pass --data-file=-
+printf '%s' '<random>'          | gcloud secrets create flask-secret --data-file=-
+printf '%s' '<strong password>' | gcloud secrets create admin-password --data-file=-
+printf '%s' '<random>'          | gcloud secrets create cron-secret --data-file=-
+printf '%s' '<twilio token>'    | gcloud secrets create twilio-auth-token --data-file=-
+```
+
+Deploy (repeat this step for every update):
 
 ```bash
 gcloud run deploy shift-scheduler \
   --source . \
   --region us-central1 \
-  --add-cloudsql-instances PROJECT:REGION:INSTANCE \
-  --set-env-vars INSTANCE_CONNECTION_NAME=PROJECT:REGION:INSTANCE,DB_USER=app,DB_NAME=shift_scheduler \
-  --set-secrets DB_PASS=db-pass:latest,SECRET_KEY=flask-secret:latest
+  --allow-unauthenticated \
+  --max-instances 2 \
+  --add-cloudsql-instances YOUR_PROJECT_ID:us-central1:shift-scheduler-db \
+  --set-env-vars "INSTANCE_CONNECTION_NAME=YOUR_PROJECT_ID:us-central1:shift-scheduler-db,DB_USER=app,DB_NAME=shift_scheduler,APP_TIMEZONE=America/Denver,ADMIN_WHATSAPP_NUMBER=+1...,TWILIO_ACCOUNT_SID=AC...,TWILIO_WHATSAPP_NUMBER=+1...,TWILIO_CONTENT_SID_INVITE=HX...,TWILIO_CONTENT_SID_REMINDER=HX...,TWILIO_CONTENT_SID_ALERT=HX...,PUBLIC_BASE_URL=https://YOUR-SERVICE-URL" \
+  --set-secrets "DB_PASS=db-pass:latest,SECRET_KEY=flask-secret:latest,ADMIN_PASSWORD=admin-password:latest,CRON_SECRET=cron-secret:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest"
 ```
 
-When `INSTANCE_CONNECTION_NAME` is set, the app connects over the Cloud SQL
-Unix socket (`/cloudsql/<name>`); otherwise it falls back to TCP for local dev.
+Notes:
+- The first deploy prints the service URL — set `PUBLIC_BASE_URL` to it (and
+  use it in the invite template's URL button) and redeploy.
+- Migrations run automatically at container startup (`flask db upgrade`),
+  so keep `--max-instances` small to avoid concurrent DDL on cold starts.
+- When `INSTANCE_CONNECTION_NAME` is set, the app connects over the Cloud SQL
+  Unix socket (`/cloudsql/<name>`); otherwise it falls back to TCP for local dev.
+- Seed the roster once deployed: `flask admin import-workers workers.csv`
+  (run locally against Cloud SQL via the Cloud SQL Auth Proxy, or add
+  employees in the dashboard).
 
 ## Twilio WhatsApp setup
 
-1. Create a Twilio account and enable the WhatsApp sandbox (Messaging →
-   Try it out → Send a WhatsApp message). Workers must join the sandbox once
-   by texting the join code — fine for testing.
-2. For production, register a WhatsApp sender on your own number via Twilio
-   (requires Meta business verification, done through the Twilio console).
-3. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`,
-   and `PUBLIC_BASE_URL` (your Cloud Run URL, so links in messages work).
-   Leave them blank and messages are logged instead of sent.
+See **TWILIO_SETUP.md** — Part A–C for sandbox testing, Part D for the
+production sender + the three message templates (shift invite, worker
+reminder, admin staffing alert) that must be approved by Meta. Production
+sending requires the three `TWILIO_CONTENT_SID_*` env vars; when they are
+blank the app falls back to free-form bodies, which only deliver in the
+sandbox. Leave the Twilio credentials blank entirely and messages are logged
+instead of sent.
 
 ## Understaffing alerts (Cloud Scheduler)
 
@@ -110,22 +161,14 @@ The window is configurable with `ALERT_WINDOW_MIN_HOURS` /
 `ALERT_WINDOW_MAX_HOURS` (default 24–48). You can also run a sweep manually:
 `flask admin check-staffing`.
 
-## Upgrading an existing database
-
-The alert and reminder features add one column each. On an existing MySQL
-database run:
-
-```sql
-ALTER TABLE shifts ADD COLUMN understaffed_alert_sent_at DATETIME NULL;
-ALTER TABLE shift_assignments ADD COLUMN reminder_sent_at DATETIME NULL;
-```
-
-(Fresh databases created with `flask init-db` already include it.)
-
 ## Security
 
 - **Admin login**: all `/admin` pages require the password set in
   `ADMIN_PASSWORD` (session-based, 12h lifetime, log out from the nav bar).
+  Login attempts are rate-limited (10/min per IP).
+- **CSRF**: all admin/login forms carry a CSRF token (Flask-WTF). Worker
+  token pages and the cron endpoint are exempt — they authenticate by
+  unguessable URL token and shared-secret header respectively.
 - **Worker pages** (`/accept/<token>`, `/decline/<token>`) are public by
   design — the 43-char random token in each worker's private link is the
   credential.
@@ -136,6 +179,14 @@ ALTER TABLE shift_assignments ADD COLUMN reminder_sent_at DATETIME NULL;
   generated URLs are https.
 - Before deploying, set strong values for `SECRET_KEY`, `ADMIN_PASSWORD`,
   and `CRON_SECRET` (e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+
+## Observability
+
+- `/healthz` probes the database (`SELECT 1`) and returns 503 if it's
+  unreachable.
+- Set `SENTRY_DSN` to enable error reporting via Sentry; `LOG_LEVEL`
+  controls log verbosity (default INFO). Cloud Run captures stdout/stderr
+  into Cloud Logging automatically.
 
 ## Timezone
 

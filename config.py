@@ -73,9 +73,22 @@ class Config:
         os.environ.get("SESSION_LIFETIME_SECONDS", 12 * 3600)
     )
 
+    # CSRF tokens (Flask-WTF) on admin/login forms. No separate expiry —
+    # tokens live as long as the session, so a dashboard tab left open for
+    # hours doesn't start failing form submits.
+    WTF_CSRF_TIME_LIMIT = None
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
+
+
+class TestingConfig(Config):
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite://"  # in-memory
+    SQLALCHEMY_ENGINE_OPTIONS = {}
+    WTF_CSRF_ENABLED = False
+    RATELIMIT_ENABLED = False
 
 
 class ProductionConfig(Config):

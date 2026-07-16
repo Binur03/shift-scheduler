@@ -21,6 +21,7 @@
     {% endwith %}
 
     <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input type="hidden" name="next" value="{{ request.args.get('next', '') }}" />
       <label class="block text-sm text-slate-600 mb-1" for="password">Password</label>
       <input id="password" name="password" type="password" required autofocus

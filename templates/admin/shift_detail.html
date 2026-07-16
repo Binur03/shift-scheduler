@@ -21,12 +21,14 @@
 
 <div class="flex gap-3 mb-8">
   <form method="post" action="{{ url_for('admin.dispatch_shift', shift_id=shift.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <button class="bg-slate-900 text-white rounded-md px-4 py-2 text-sm hover:bg-slate-700">
       {{ 'Send invitations to all active employees' if not shift.assignments else 'Re-send to workers who haven\'t replied' }}
     </button>
   </form>
   <form method="post" action="{{ url_for('admin.delete_shift', shift_id=shift.id) }}"
         onsubmit="return confirm('Delete this shift?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <button class="border border-red-300 text-red-700 rounded-md px-4 py-2 text-sm hover:bg-red-50">
       Delete shift
     </button>
@@ -64,6 +66,7 @@
           {% if a.status.value in ('accepted', 'pending') %}
           <form method="post" action="{{ url_for('admin.cancel_assignment', assignment_id=a.id) }}"
                 onsubmit="return confirm('Remove {{ a.employee.first_name }} from this shift? Their seat reopens.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <button class="text-xs text-red-600 hover:underline">Remove</button>
           </form>
           {% endif %}

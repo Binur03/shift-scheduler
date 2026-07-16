@@ -17,13 +17,16 @@ COPY . .
 
 # Cloud Run sends traffic to $PORT (defaults to 8080).
 EXPOSE 8080
+ENV FLASK_APP=app.py
 
-# Run with Gunicorn. Cloud Run scales by instance, so a small number of
-# workers/threads per instance is appropriate. `app:app` refers to the
-# module-level Flask app created by create_app() in app.py.
-CMD exec gunicorn \
+# Apply pending migrations, then run Gunicorn. Cloud Run scales by instance,
+# so a small number of workers/threads per instance is appropriate. `app:app`
+# refers to the module-level Flask app created by create_app() in app.py.
+# (Startup migrations assume instances don't race on DDL — keep max-instances
+# small, or run `flask db upgrade` as a separate release step at scale.)
+CMD exec sh -c "flask db upgrade && exec gunicorn \
     --bind :$PORT \
     --workers 2 \
     --threads 8 \
     --timeout 0 \
-    app:app
+    app:app"
