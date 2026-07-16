@@ -87,10 +87,10 @@ the transaction rolls back and a "Shift Full" view is returned (HTTP 409).
 
 ## Deploy to Google Cloud Run
 
-One-time setup (replace `YOUR_PROJECT_ID`; region `us-central1` assumed):
+One-time setup (project `fransico-work`; region `us-central1` assumed):
 
 ```bash
-gcloud config set project YOUR_PROJECT_ID
+gcloud config set project fransico-work
 gcloud services enable run.googleapis.com sqladmin.googleapis.com \
   secretmanager.googleapis.com cloudscheduler.googleapis.com \
   cloudbuild.googleapis.com
@@ -118,8 +118,8 @@ gcloud run deploy shift-scheduler \
   --region us-central1 \
   --allow-unauthenticated \
   --max-instances 2 \
-  --add-cloudsql-instances YOUR_PROJECT_ID:us-central1:shift-scheduler-db \
-  --set-env-vars "INSTANCE_CONNECTION_NAME=YOUR_PROJECT_ID:us-central1:shift-scheduler-db,DB_USER=app,DB_NAME=shift_scheduler,APP_TIMEZONE=America/Denver,ADMIN_WHATSAPP_NUMBER=+1...,TWILIO_ACCOUNT_SID=AC...,TWILIO_WHATSAPP_NUMBER=+1...,TWILIO_CONTENT_SID_INVITE=HX...,TWILIO_CONTENT_SID_REMINDER=HX...,TWILIO_CONTENT_SID_ALERT=HX...,PUBLIC_BASE_URL=https://YOUR-SERVICE-URL" \
+  --add-cloudsql-instances fransico-work:us-central1:shift-scheduler-db \
+  --set-env-vars "INSTANCE_CONNECTION_NAME=fransico-work:us-central1:shift-scheduler-db,DB_USER=app,DB_NAME=shift_scheduler,APP_TIMEZONE=America/Denver,ADMIN_WHATSAPP_NUMBER=+1...,TWILIO_ACCOUNT_SID=AC...,TWILIO_WHATSAPP_NUMBER=+1...,TWILIO_CONTENT_SID_INVITE=HX...,TWILIO_CONTENT_SID_REMINDER=HX...,TWILIO_CONTENT_SID_ALERT=HX...,PUBLIC_BASE_URL=https://YOUR-SERVICE-URL" \
   --set-secrets "DB_PASS=db-pass:latest,SECRET_KEY=flask-secret:latest,ADMIN_PASSWORD=admin-password:latest,CRON_SECRET=cron-secret:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest"
 ```
 
