@@ -1,0 +1,27 @@
+# Secrets & local config — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local database & instance data
+instance/
+*.db
+*.sqlite3
+
+# Tests & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

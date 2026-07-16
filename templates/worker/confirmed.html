@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shift confirmed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-md w-full p-8 text-center">
+    <div class="w-14 h-14 rounded-full bg-green-100 text-green-700 flex items-center justify-center mx-auto mb-4 text-2xl">✓</div>
+    <h1 class="text-xl font-semibold text-slate-900 mb-1">You're confirmed</h1>
+    <p class="text-slate-500 text-sm mb-6">Thanks {{ assignment.employee.first_name }} — see you there.</p>
+    <div class="bg-slate-50 rounded-lg p-5 text-left space-y-1">
+      <p class="font-medium text-slate-900">{{ shift.job.title }}</p>
+      <p class="text-sm text-slate-600">{{ shift.job.location_address }}</p>
+      <p class="text-sm text-slate-600">{{ shift.date }}</p>
+      <p class="text-sm text-slate-600">
+        {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}
+      </p>
+    </div>
+  </div>
+</body>
+</html>

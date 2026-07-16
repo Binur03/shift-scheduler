@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shift offer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-md w-full p-8 text-center">
+    <h1 class="text-xl font-semibold text-slate-900 mb-1">You're invited to a shift</h1>
+    <p class="text-slate-500 text-sm mb-6">Hi {{ assignment.employee.first_name }}, please confirm below.</p>
+
+    <div class="bg-slate-50 rounded-lg p-5 text-left mb-6 space-y-1">
+      <p class="font-medium text-slate-900">{{ shift.job.title }}</p>
+      <p class="text-sm text-slate-600">{{ shift.job.location_address }}</p>
+      <p class="text-sm text-slate-600">{{ shift.date }}</p>
+      <p class="text-sm text-slate-600">
+        {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}
+      </p>
+    </div>
+
+    <form method="post" action="{{ url_for('worker.accept_offer', token=assignment.token) }}">
+      <button class="w-full bg-green-600 text-white rounded-lg px-4 py-3 font-medium hover:bg-green-700">
+        I'm available — accept this shift
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('worker.decline_offer', token=assignment.token) }}" class="mt-3">
+      <button class="w-full bg-white text-slate-700 border border-slate-300 rounded-lg px-4 py-3 font-medium hover:bg-slate-100">
+        I'm not available
+      </button>
+    </form>
+    <p class="text-xs text-slate-400 mt-4">
+      {{ shift.accepted_count }} of {{ shift.required_headcount }} spots filled
+    </p>
+  </div>
+</body>
+</html>

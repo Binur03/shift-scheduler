@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-semibold text-slate-900 mb-6">Jobs</h1>
+
+<div class="bg-white rounded-lg border border-slate-200 p-6 mb-8">
+  <h2 class="text-sm font-medium text-slate-700 mb-4">Add job location</h2>
+  <form method="post" action="{{ url_for('admin.create_job') }}"
+        class="grid grid-cols-1 md:grid-cols-4 gap-3">
+    <input name="title" placeholder="Title" required
+           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
+    <input name="location_address" placeholder="Address" required
+           class="border border-slate-300 rounded-md px-3 py-2 text-sm md:col-span-2" />
+    <input name="default_headcount" type="number" min="1" value="1" placeholder="Headcount"
+           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
+    <button class="bg-slate-900 text-white rounded-md px-4 py-2 text-sm hover:bg-slate-700 md:col-span-4 md:w-32">
+      Add
+    </button>
+  </form>
+</div>
+
+<div class="space-y-3">
+  {% for j in jobs %}
+  <div class="bg-white rounded-lg border border-slate-200 p-5">
+    <form method="post" action="{{ url_for('admin.update_job', job_id=j.id) }}"
+          class="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+      <input name="title" value="{{ j.title }}"
+             class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
+      <input name="location_address" value="{{ j.location_address }}"
+             class="border border-slate-300 rounded-md px-3 py-2 text-sm md:col-span-2" />
+      <input name="default_headcount" type="number" min="1" value="{{ j.default_headcount }}"
+             class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
+      <div class="flex gap-2 justify-end">
+        <button class="text-slate-900 border border-slate-300 rounded-md px-3 py-2 text-sm hover:bg-slate-100">
+          Save
+        </button>
+      </div>
+    </form>
+    <form method="post" action="{{ url_for('admin.delete_job', job_id=j.id) }}"
+          class="mt-2 text-right" onsubmit="return confirm('Delete this job and its shifts?');">
+      <button class="text-red-700 text-sm hover:underline">Delete</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="text-slate-400">No jobs yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}
