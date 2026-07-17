@@ -1,136 +1,268 @@
 {% extends "base.html" %}
 {% block title %}Shifts{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-semibold text-slate-900 mb-6">Shifts</h1>
 
-<div class="bg-white rounded-lg border border-slate-200 p-6 mb-8">
-  <h2 class="text-sm font-medium text-slate-700 mb-4">Create shift</h2>
-  {% if not jobs %}
-  <p class="text-sm text-slate-500">
-    You need a job before you can create shifts.
-    <a href="{{ url_for('admin.list_jobs') }}" class="text-slate-900 underline">Create a job first →</a>
-  </p>
-  {% else %}
-  <form method="post" action="{{ url_for('admin.create_shift') }}"
-        class="grid grid-cols-1 md:grid-cols-6 gap-3">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <select name="job_id" required
-            class="border border-slate-300 rounded-md px-3 py-2 text-sm md:col-span-2">
-      <option value="" disabled selected>Select a job…</option>
-      {% for j in jobs %}
-        <option value="{{ j.id }}">{{ j.title }} — {{ j.location_address }}</option>
-      {% endfor %}
-    </select>
-    <input name="date" type="date" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <input name="start_time" type="time" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <input name="end_time" type="time" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <input name="required_headcount" type="number" min="1" placeholder="Headcount"
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <button class="bg-slate-900 text-white rounded-md px-4 py-2 text-sm hover:bg-slate-700 md:col-span-6 md:w-32">
-      Create
-    </button>
-  </form>
-  {% endif %}
-</div>
-
-<div class="bg-white rounded-lg border border-slate-200 p-6 mb-8">
-  <h2 class="text-sm font-medium text-slate-700 mb-1">Send weekly schedule</h2>
-  <p class="text-xs text-slate-500 mb-4">
-    Broadcasts every open shift in the 7 days starting on the chosen date to all
-    active workers via WhatsApp.
-  </p>
-  <form method="post" action="{{ url_for('admin.dispatch_week') }}" class="flex gap-3 items-center">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <input name="week_start" type="date" required value="{{ next_monday }}"
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <button class="bg-green-700 text-white rounded-md px-4 py-2 text-sm hover:bg-green-800"
-            onclick="return confirm('Send WhatsApp invitations for all open shifts in this week?')">
-      Send week to workers
-    </button>
-  </form>
-  <div class="border-t border-slate-100 mt-4 pt-4">
-    <p class="text-xs text-slate-500 mb-2">
-      Schedule repeats? Copy a week's shifts to the following week, then adjust.
-    </p>
-    <form method="post" action="{{ url_for('admin.copy_week') }}" class="flex gap-3 items-center">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-      <input name="week_start" type="date" required value="{{ this_monday }}"
-             class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-      <button class="border border-slate-300 text-slate-700 rounded-md px-4 py-2 text-sm hover:bg-slate-100">
-        Copy week → next week
-      </button>
-    </form>
+<div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+  <div>
+    <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Shifts</h1>
+    <p class="text-sm text-slate-500 mt-1">Build the schedule, send it to your workers, and watch seats fill in.</p>
   </div>
 </div>
 
-<h2 class="text-sm font-medium text-slate-700 mb-3">Upcoming shifts</h2>
-<div class="bg-white rounded-lg border border-slate-200 overflow-hidden mb-8">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-100 text-slate-600 text-left">
-      <tr>
-        <th class="px-4 py-3">Job</th>
-        <th class="px-4 py-3">Date</th>
-        <th class="px-4 py-3">Time</th>
-        <th class="px-4 py-3">Staffing</th>
-        <th class="px-4 py-3">Responses</th>
-        <th class="px-4 py-3 text-right">Actions</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100">
-      {% for s in upcoming %}
-      {% set urgent = (not s.is_full) and s.date <= soon and s.status != 'cancelled' %}
-      <tr class="{{ 'bg-red-50' if urgent else '' }}">
-        <td class="px-4 py-3">{{ s.job.title }}</td>
-        <td class="px-4 py-3 text-slate-600">{{ s.date.strftime('%a %d %b') }}</td>
-        <td class="px-4 py-3 text-slate-600">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
-        <td class="px-4 py-3">
-          {% if s.is_full %}
-            <span class="rounded-full px-2 py-0.5 text-xs bg-green-100 text-green-800">Filled {{ s.accepted_count }}/{{ s.required_headcount }}</span>
-          {% elif urgent %}
-            <span class="rounded-full px-2 py-0.5 text-xs bg-red-100 text-red-800 font-medium">Needs {{ s.required_headcount - s.accepted_count }} — starts soon!</span>
-          {% else %}
-            <span class="rounded-full px-2 py-0.5 text-xs bg-amber-100 text-amber-800">Needs {{ s.required_headcount - s.accepted_count }} ({{ s.accepted_count }}/{{ s.required_headcount }})</span>
-          {% endif %}
-        </td>
-        <td class="px-4 py-3 text-xs text-slate-500">
-          {% if s.assignments %}
-            {{ s.accepted_count }} yes · {{ s.declined_count }} no · {{ s.pending_count }} waiting
-          {% else %}
-            not sent yet
-          {% endif %}
-        </td>
-        <td class="px-4 py-3 text-right">
-          <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="text-slate-900 hover:underline">Manage</a>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">No upcoming shifts.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# ---------- Stat cards ---------- #}
+{% set needing = upcoming | rejectattr('is_full') | list | length %}
+{% set filled = (upcoming | length) - needing %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    <div class="flex items-center justify-between">
+      <p class="text-sm font-medium text-slate-500">Upcoming shifts</p>
+      <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+      </span>
+    </div>
+    <p class="text-3xl font-bold text-slate-900 mt-2">{{ upcoming | length }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    <div class="flex items-center justify-between">
+      <p class="text-sm font-medium text-slate-500">Need workers</p>
+      <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+      </span>
+    </div>
+    <p class="text-3xl font-bold {{ 'text-amber-600' if needing else 'text-slate-900' }} mt-2">{{ needing }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    <div class="flex items-center justify-between">
+      <p class="text-sm font-medium text-slate-500">Fully staffed</p>
+      <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+      </span>
+    </div>
+    <p class="text-3xl font-bold text-emerald-600 mt-2">{{ filled }}</p>
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+    <div class="flex items-center justify-between">
+      <p class="text-sm font-medium text-slate-500">Active workers</p>
+      <span class="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+      </span>
+    </div>
+    <p class="text-3xl font-bold text-slate-900 mt-2">{{ active_workers }}</p>
+  </div>
 </div>
 
-{% if past %}
-<h2 class="text-sm font-medium text-slate-700 mb-3">Past shifts (last 20)</h2>
-<div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
-  <table class="w-full text-sm">
-    <tbody class="divide-y divide-slate-100">
-      {% for s in past %}
-      <tr class="text-slate-500">
-        <td class="px-4 py-3">{{ s.job.title }}</td>
-        <td class="px-4 py-3">{{ s.date.strftime('%a %d %b') }}</td>
-        <td class="px-4 py-3">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
-        <td class="px-4 py-3">{{ s.accepted_count }}/{{ s.required_headcount }} worked</td>
-        <td class="px-4 py-3 text-right">
-          <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="hover:underline">View</a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="grid lg:grid-cols-2 gap-6 mb-8">
+  {# ---------- Create shift ---------- #}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center gap-3 mb-1">
+      <span class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+      </span>
+      <div>
+        <h2 class="font-semibold text-slate-900">Create a shift</h2>
+        <p class="text-xs text-slate-500">Pick the job, day, and how many workers you need.</p>
+      </div>
+    </div>
+    {% if not jobs %}
+    <div class="mt-4 rounded-lg border border-dashed border-slate-300 p-6 text-center">
+      <p class="text-sm text-slate-500">You need a job location before you can create shifts.</p>
+      <a href="{{ url_for('admin.list_jobs') }}" class="inline-flex items-center gap-1 mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+        Create a job first
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+      </a>
+    </div>
+    {% else %}
+    <form method="post" action="{{ url_for('admin.create_shift') }}" class="mt-4 grid grid-cols-2 gap-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="col-span-2 block">
+        <span class="text-xs font-medium text-slate-600">Job</span>
+        <select name="job_id" required
+                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
+          <option value="" disabled selected>Select a job…</option>
+          {% for j in jobs %}
+            <option value="{{ j.id }}">{{ j.title }} — {{ j.location_address }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Date</span>
+        <input name="date" type="date" required
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Workers needed</span>
+        <input name="required_headcount" type="number" min="1" placeholder="e.g. 3"
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Starts</span>
+        <input name="start_time" type="time" required
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Ends</span>
+        <input name="end_time" type="time" required
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <button class="col-span-2 inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        Create shift
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ---------- Weekly actions ---------- #}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col gap-5">
+    <div class="flex items-center gap-3">
+      <span class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
+      </span>
+      <div>
+        <h2 class="font-semibold text-slate-900">Send the weekly schedule</h2>
+        <p class="text-xs text-slate-500">Messages every active worker an invite for each open shift in the 7 days starting on this date.</p>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('admin.dispatch_week') }}" class="flex flex-wrap gap-3 items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Week starting</span>
+        <input name="week_start" type="date" required value="{{ next_monday }}"
+               class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
+      </label>
+      <button class="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/30 transition"
+              onclick="return confirm('Send invitations for all open shifts in this week to every active worker?')">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
+        Send week to workers
+      </button>
+    </form>
+
+    <div class="border-t border-slate-100 pt-5">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" /></svg>
+        </span>
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900">Repeat last week's schedule</h3>
+          <p class="text-xs text-slate-500">Copies every shift in the chosen week to the following week — then adjust as needed.</p>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('admin.copy_week') }}" class="flex flex-wrap gap-3 items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Copy the week of</span>
+          <input name="week_start" type="date" required value="{{ this_monday }}"
+                 class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+        </label>
+        <button class="inline-flex items-center gap-2 border border-slate-300 text-slate-700 rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 transition">
+          Copy to next week
+        </button>
+      </form>
+    </div>
+  </div>
 </div>
+
+{# ---------- Upcoming shifts table ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+  <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <h2 class="font-semibold text-slate-900">Upcoming shifts</h2>
+    <span class="text-xs text-slate-400">Shifts starting within 48h that still need workers are highlighted</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500 text-left text-xs uppercase tracking-wider">
+        <tr>
+          <th class="px-6 py-3 font-semibold">Job</th>
+          <th class="px-4 py-3 font-semibold">Date</th>
+          <th class="px-4 py-3 font-semibold">Time</th>
+          <th class="px-4 py-3 font-semibold">Staffing</th>
+          <th class="px-4 py-3 font-semibold">Responses</th>
+          <th class="px-6 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for s in upcoming %}
+        {% set urgent = (not s.is_full) and s.date <= soon and s.status != 'cancelled' %}
+        <tr class="hover:bg-slate-50/70 transition {{ 'bg-rose-50/60 hover:bg-rose-50' if urgent else '' }}">
+          <td class="px-6 py-3.5">
+            <span class="font-medium text-slate-900">{{ s.job.title }}</span>
+            <span class="block text-xs text-slate-400">{{ s.job.location_address }}</span>
+          </td>
+          <td class="px-4 py-3.5 text-slate-600 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
+          <td class="px-4 py-3.5 text-slate-600 whitespace-nowrap">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
+          <td class="px-4 py-3.5">
+            {% if s.is_full %}
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Filled {{ s.accepted_count }}/{{ s.required_headcount }}
+              </span>
+            {% elif urgent %}
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-rose-100 text-rose-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                Needs {{ s.required_headcount - s.accepted_count }} — starts soon
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Needs {{ s.required_headcount - s.accepted_count }} ({{ s.accepted_count }}/{{ s.required_headcount }})
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3.5 text-xs text-slate-500 whitespace-nowrap">
+            {% if s.assignments %}
+              <span class="text-emerald-600 font-medium">{{ s.accepted_count }} yes</span> ·
+              <span class="text-rose-500">{{ s.declined_count }} no</span> ·
+              <span>{{ s.pending_count }} waiting</span>
+            {% else %}
+              <span class="italic text-slate-400">not sent yet</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-3.5 text-right">
+            <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}"
+               class="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+              Manage
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="px-6 py-12 text-center">
+            <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+            <p class="text-sm font-medium text-slate-500">No upcoming shifts</p>
+            <p class="text-xs text-slate-400 mt-1">Create one above to get the week started.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ---------- Past shifts (collapsible) ---------- #}
+{% if past %}
+<details class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+  <summary class="px-6 py-4 flex items-center gap-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+    <svg class="chev w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+    Past shifts <span class="font-normal text-slate-400">(last {{ past | length }})</span>
+  </summary>
+  <div class="overflow-x-auto border-t border-slate-100">
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-slate-100">
+        {% for s in past %}
+        <tr class="text-slate-500 hover:bg-slate-50/70 transition">
+          <td class="px-6 py-3">{{ s.job.title }}</td>
+          <td class="px-4 py-3 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
+          <td class="px-4 py-3 whitespace-nowrap">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
+          <td class="px-4 py-3">{{ s.accepted_count }}/{{ s.required_headcount }} worked</td>
+          <td class="px-6 py-3 text-right">
+            <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="text-indigo-600 hover:text-indigo-500 font-medium">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
 {% endif %}
 {% endblock %}

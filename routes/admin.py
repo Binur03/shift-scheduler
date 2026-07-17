@@ -203,6 +203,7 @@ def list_shifts():
         soon=today + timedelta(days=2),
         this_monday=this_monday,
         next_monday=this_monday + timedelta(days=7),
+        active_workers=Employee.query.filter_by(is_active=True).count(),
     )
 
 

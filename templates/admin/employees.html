@@ -1,72 +1,119 @@
 {% extends "base.html" %}
-{% block title %}Employees{% endblock %}
+{% block title %}Workers{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-semibold text-slate-900">Employees</h1>
+
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Workers</h1>
+  <p class="text-sm text-slate-500 mt-1">Everyone here receives shift invitations when you dispatch. Deactivate someone to pause their invites without losing their history.</p>
 </div>
 
-<div class="bg-white rounded-lg border border-slate-200 p-6 mb-8">
-  <h2 class="text-sm font-medium text-slate-700 mb-4">Add employee</h2>
+{# ---------- Add worker ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>
+    </span>
+    <div>
+      <h2 class="font-semibold text-slate-900">Add a worker</h2>
+      <p class="text-xs text-slate-500">Phone number can be typed any way — 303-555-0123 works fine.</p>
+    </div>
+  </div>
   <form method="post" action="{{ url_for('admin.create_employee') }}"
-        class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <input name="first_name" placeholder="First name" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <input name="last_name" placeholder="Last name" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <input name="phone_number" placeholder="+15551234567" required
-           class="border border-slate-300 rounded-md px-3 py-2 text-sm" />
-    <button class="bg-slate-900 text-white rounded-md px-4 py-2 text-sm hover:bg-slate-700">
-      Add
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">First name</span>
+      <input name="first_name" placeholder="Maria" required
+             class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+    </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">Last name</span>
+      <input name="last_name" placeholder="Lopez" required
+             class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+    </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">Mobile number</span>
+      <input name="phone_number" placeholder="303-555-0123" required
+             class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+    </label>
+    <button class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+      Add worker
     </button>
   </form>
 </div>
 
-<div class="bg-white rounded-lg border border-slate-200 overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-slate-100 text-slate-600 text-left">
-      <tr>
-        <th class="px-4 py-3">Name</th>
-        <th class="px-4 py-3">Phone</th>
-        <th class="px-4 py-3">Status</th>
-        <th class="px-4 py-3 text-right">Actions</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100">
-      {% for e in employees %}
-      <tr>
-        <td class="px-4 py-3">{{ e.first_name }} {{ e.last_name }}</td>
-        <td class="px-4 py-3 text-slate-600">{{ e.phone_number }}</td>
-        <td class="px-4 py-3">
-          {% if e.is_active %}
-            <span class="text-green-700 bg-green-100 rounded-full px-2 py-0.5 text-xs">Active</span>
-          {% else %}
-            <span class="text-slate-600 bg-slate-100 rounded-full px-2 py-0.5 text-xs">Inactive</span>
-          {% endif %}
-        </td>
-        <td class="px-4 py-3 text-right space-x-2">
-          {% if e.is_active %}
-          <form method="post" action="{{ url_for('admin.deactivate_employee', employee_id=e.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="text-amber-700 hover:underline">Deactivate</button>
-          </form>
-          {% else %}
-          <form method="post" action="{{ url_for('admin.activate_employee', employee_id=e.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="text-green-700 hover:underline">Activate</button>
-          </form>
-          {% endif %}
-          <form method="post" action="{{ url_for('admin.delete_employee', employee_id=e.id) }}" class="inline"
-                onsubmit="return confirm('Delete this employee?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button class="text-red-700 hover:underline">Delete</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="px-4 py-6 text-center text-slate-400">No employees yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# ---------- Roster ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+  <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <h2 class="font-semibold text-slate-900">Roster</h2>
+    <span class="text-xs text-slate-400">{{ employees | selectattr('is_active') | list | length }} active of {{ employees | length }}</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500 text-left text-xs uppercase tracking-wider">
+        <tr>
+          <th class="px-6 py-3 font-semibold">Worker</th>
+          <th class="px-4 py-3 font-semibold">Phone</th>
+          <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-6 py-3 text-right font-semibold">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for e in employees %}
+        <tr class="hover:bg-slate-50/70 transition {{ 'opacity-60' if not e.is_active }}">
+          <td class="px-6 py-3.5">
+            <span class="inline-flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-full {{ 'bg-indigo-100 text-indigo-700' if e.is_active else 'bg-slate-100 text-slate-500' }} flex items-center justify-center text-xs font-bold uppercase">
+                {{ e.first_name[:1] }}{{ e.last_name[:1] }}
+              </span>
+              <span class="font-medium text-slate-900">{{ e.first_name }} {{ e.last_name }}</span>
+            </span>
+          </td>
+          <td class="px-4 py-3.5 text-slate-600 font-mono text-xs">{{ e.phone_number }}</td>
+          <td class="px-4 py-3.5">
+            {% if e.is_active %}
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-600">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactive
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-3.5">
+            <div class="flex items-center justify-end gap-2">
+              {% if e.is_active %}
+              <form method="post" action="{{ url_for('admin.deactivate_employee', employee_id=e.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="text-xs font-medium text-amber-700 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-50 transition">Deactivate</button>
+              </form>
+              {% else %}
+              <form method="post" action="{{ url_for('admin.activate_employee', employee_id=e.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50 transition">Reactivate</button>
+              </form>
+              {% endif %}
+              <form method="post" action="{{ url_for('admin.delete_employee', employee_id=e.id) }}"
+                    onsubmit="return confirm('Delete this worker? This removes their history too — deactivating is usually better.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="text-xs font-medium text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" class="px-6 py-12 text-center">
+            <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+            <p class="text-sm font-medium text-slate-500">No workers yet</p>
+            <p class="text-xs text-slate-400 mt-1">Add your first worker above — they'll get shift invites by text.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

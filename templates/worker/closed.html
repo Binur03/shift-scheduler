@@ -1,19 +1,24 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Offer closed</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4">
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-md w-full p-8 text-center">
-    <div class="w-14 h-14 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-4 text-2xl">—</div>
-    <h1 class="text-xl font-semibold text-slate-900 mb-1">This invitation is no longer active</h1>
-    <p class="text-slate-500 text-sm">
-      The offer for {{ shift.job.title }} on {{ shift.date }} is
-      {{ assignment.status.value }}. Please contact your coordinator with questions.
+{% extends "worker/_layout.html" %}
+{% block title %}Invitation closed · Shift Scheduler{% endblock %}
+{% block card %}
+<div class="h-1.5 bg-gradient-to-r from-slate-300 to-slate-400"></div>
+<div class="p-7 text-center">
+  <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+    <svg class="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+  </div>
+  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">This invitation is no longer active</h1>
+  <p class="text-sm text-slate-500 mb-6">
+    The offer for this shift has been closed ({{ assignment.status.value }}).
+  </p>
+
+  <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-5 text-left space-y-1.5">
+    <p class="font-semibold text-slate-700">{{ shift.job.title }}</p>
+    <p class="text-sm text-slate-500">
+      {{ shift.date.strftime('%A, %d %B') }} ·
+      {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}
     </p>
   </div>
-</body>
-</html>
+
+  <p class="text-xs text-slate-400 mt-5">Contact your coordinator with any questions.</p>
+</div>
+{% endblock %}

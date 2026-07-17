@@ -1,12 +1,16 @@
-# Twilio WhatsApp Setup
+# Twilio Setup (WhatsApp or SMS)
 
-Two modes:
+Three modes:
 
 - **Sandbox** (Part A–C): free, instant, for testing. Messages are free-form;
   only phones that have "joined" the sandbox receive them.
-- **Production** (Part D): your own WhatsApp sender + Meta-approved message
-  templates. Required for messaging real workers — **start Part D early, Meta
-  approval can take days to weeks.**
+- **Production via SMS** (Part E): **no Meta approval, no templates** — the
+  fastest way to go live. Buy a Twilio number, complete the (much simpler)
+  US sender registration, set `MESSAGING_CHANNEL=sms`.
+- **Production via WhatsApp** (Part D): your own WhatsApp sender +
+  Meta-approved message templates. Richer UX, but **start early — Meta
+  approval can take days to weeks.** You can launch on SMS and switch to
+  WhatsApp later with one env var.
 
 ---
 
@@ -134,3 +138,35 @@ above matches what `utils/sms.py` sends — if you reword a template, keep the
   messages too, so it works without joining anything.
 - Twilio WhatsApp pricing is per-conversation; Utility conversations are
   cheap but not free — see https://www.twilio.com/whatsapp/pricing.
+
+---
+
+## Part E — Production via SMS (no Meta approval)
+
+SMS has no template mechanism, so invitations, reminders, and alerts go out
+as plain texts with the accept link in the body. Setup:
+
+1. **Buy a number:** Console → **Phone Numbers → Buy a number** (SMS-capable).
+   A toll-free number (`+1 8xx…`) is the simplest for business texting.
+2. **Register the sender** (US requirement, done entirely in the console):
+   - Toll-free number → submit **Toll-Free Verification** (business name,
+     use case "employee shift notifications", sample message). Typically
+     approved in a few business days.
+   - Or local 10-digit number → register an **A2P 10DLC** brand + campaign
+     (small one-time + monthly fees; low-volume "Sole Proprietor" tier exists).
+   Unregistered/unverified senders get filtered or blocked by US carriers,
+   so don't skip this.
+3. **Configure the app:**
+
+   ```
+   MESSAGING_CHANNEL=sms
+   TWILIO_SMS_NUMBER=+18xx5551234
+   TWILIO_ACCOUNT_SID=AC…
+   TWILIO_AUTH_TOKEN=…
+   ```
+
+   The `TWILIO_CONTENT_SID_*` and `TWILIO_WHATSAPP_NUMBER` vars are ignored
+   on the SMS channel. `ADMIN_WHATSAPP_NUMBER` is still the alert
+   destination (it receives SMS in this mode).
+4. **Switching to WhatsApp later:** finish Part D, then set
+   `MESSAGING_CHANNEL=whatsapp` and redeploy — nothing else changes.

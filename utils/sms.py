@@ -1,12 +1,23 @@
-"""Production WhatsApp integration via Twilio.
+"""Production WhatsApp/SMS integration via Twilio.
 
 Wraps ``twilio.rest.Client`` in a small service object so the rest of the
 application depends on an interface rather than the SDK directly. The broadcast
 loop is deliberately fault-tolerant: a failure delivering to one worker is
 logged and skipped so the remaining workers still receive their invitations.
 
-Message templates (production)
-------------------------------
+Channel selection
+-----------------
+``MESSAGING_CHANNEL`` picks the transport:
+
+    whatsapp  (default) — richer UX, but business-initiated messages require
+              a Meta-verified sender and approved templates (see below).
+    sms       — plain text messages from ``TWILIO_SMS_NUMBER``. No message
+              templates or Meta approval needed, so this is the fastest way
+              to production (US senders still need toll-free verification or
+              A2P 10DLC registration in the Twilio console).
+
+Message templates (WhatsApp production only)
+--------------------------------------------
 WhatsApp only allows *business-initiated* messages that use a Meta-approved
 template. Free-form ``body`` text works only in the Twilio sandbox or inside
 a 24-hour customer-service window after a worker messages you. For production,
@@ -20,11 +31,13 @@ the exact template text to submit) and set their SIDs:
 When a template SID is set, messages of that type are sent via
 ``content_sid`` + ``content_variables``. When it is blank the service falls
 back to a free-form body (fine for the sandbox and local development).
+SMS always sends the free-form body — templates don't apply to SMS.
 
 Credentials are read from the environment:
     TWILIO_ACCOUNT_SID
     TWILIO_AUTH_TOKEN
-    TWILIO_WHATSAPP_NUMBER   (E.164, e.g. +14155238886)
+    TWILIO_WHATSAPP_NUMBER   (E.164, e.g. +14155238886; whatsapp channel)
+    TWILIO_SMS_NUMBER        (E.164; sms channel)
 
 The public acceptance domain is read from PUBLIC_BASE_URL (e.g.
 https://shifts.example.com); links are rendered as
@@ -93,12 +106,18 @@ class WhatsAppService:
         auth_token: str | None = None,
         whatsapp_number: str | None = None,
         base_url: str | None = None,
+        channel: str | None = None,
+        sms_number: str | None = None,
     ) -> None:
         self.account_sid = account_sid or os.environ.get("TWILIO_ACCOUNT_SID")
         self.auth_token = auth_token or os.environ.get("TWILIO_AUTH_TOKEN")
         self.whatsapp_number = whatsapp_number or os.environ.get(
             "TWILIO_WHATSAPP_NUMBER"
         )
+        self.channel = (
+            channel or os.environ.get("MESSAGING_CHANNEL", "whatsapp")
+        ).strip().lower()
+        self.sms_number = sms_number or os.environ.get("TWILIO_SMS_NUMBER")
         self.base_url = (
             base_url or os.environ.get("PUBLIC_BASE_URL", "http://localhost:8080")
         ).rstrip("/")
@@ -106,11 +125,16 @@ class WhatsAppService:
         self.reminder_content_sid = os.environ.get("TWILIO_CONTENT_SID_REMINDER")
         self.alert_content_sid = os.environ.get("TWILIO_CONTENT_SID_ALERT")
         self._client = self._build_client()
-        if self._client is not None and not self.invite_content_sid:
+        if (
+            self._client is not None
+            and self.channel == "whatsapp"
+            and not self.invite_content_sid
+        ):
             logger.warning(
                 "TWILIO_CONTENT_SID_INVITE is not set; falling back to free-form "
-                "message bodies. This only works in the sandbox or inside a "
-                "24h reply window — set the approved template SIDs for production."
+                "WhatsApp bodies. This only works in the sandbox or inside a "
+                "24h reply window — set the approved template SIDs for "
+                "production, or use MESSAGING_CHANNEL=sms."
             )
 
     # ------------------------------------------------------------------ #
@@ -123,10 +147,13 @@ class WhatsAppService:
         environments without credentials (local dev, CI); ``send_shift_broadcast``
         degrades to logging instead of raising at import time.
         """
-        if not (self.account_sid and self.auth_token and self.whatsapp_number):
+        sender = self.sms_number if self.channel == "sms" else self.whatsapp_number
+        if not (self.account_sid and self.auth_token and sender):
             logger.warning(
-                "WhatsAppService is not fully configured "
-                "(missing SID/token/number); messages will be logged, not sent."
+                "Messaging service is not fully configured for channel=%s "
+                "(missing SID/token/sender number); messages will be logged, "
+                "not sent.",
+                self.channel,
             )
             return None
         try:
@@ -162,29 +189,42 @@ class WhatsAppService:
             logger.error("%s not sent: no destination number.", context)
             return False
         if self._client is None:
-            logger.info("[WHATSAPP STUB] %s to=%s body=%s", context, to, body)
+            logger.info(
+                "[%s STUB] %s to=%s body=%s", self.channel.upper(), context, to, body
+            )
             return False
         try:
-            kwargs: dict[str, str] = {
-                "to": f"whatsapp:{to}",
-                "from_": f"whatsapp:{self.whatsapp_number}",
-            }
-            if content_sid:
-                kwargs["content_sid"] = content_sid
-                kwargs["content_variables"] = json.dumps(content_variables or {})
+            if self.channel == "sms":
+                # SMS has no template mechanism — always the plain body.
+                kwargs: dict[str, str] = {
+                    "to": to,
+                    "from_": self.sms_number,
+                    "body": body,
+                }
             else:
-                kwargs["body"] = body
+                kwargs = {
+                    "to": f"whatsapp:{to}",
+                    "from_": f"whatsapp:{self.whatsapp_number}",
+                }
+                if content_sid:
+                    kwargs["content_sid"] = content_sid
+                    kwargs["content_variables"] = json.dumps(content_variables or {})
+                else:
+                    kwargs["body"] = body
             message = self._client.messages.create(**kwargs)
             logger.info(
-                "Sent WhatsApp %s sid=%s to=%s template=%s",
+                "Sent %s %s sid=%s to=%s template=%s",
+                self.channel,
                 context,
                 message.sid,
                 to,
-                content_sid or "none (free-form)",
+                kwargs.get("content_sid", "none (free-form)"),
             )
             return True
         except Exception:  # noqa: BLE001 - callers rely on never raising
-            logger.exception("Failed to send WhatsApp %s to %s.", context, to)
+            logger.exception(
+                "Failed to send %s %s to %s.", self.channel, context, to
+            )
             return False
 
     # ------------------------------------------------------------------ #

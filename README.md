@@ -134,15 +134,23 @@ Notes:
   (run locally against Cloud SQL via the Cloud SQL Auth Proxy, or add
   employees in the dashboard).
 
-## Twilio WhatsApp setup
+## Messaging: WhatsApp or SMS
 
-See **TWILIO_SETUP.md** — Part A–C for sandbox testing, Part D for the
-production sender + the three message templates (shift invite, worker
-reminder, admin staffing alert) that must be approved by Meta. Production
-sending requires the three `TWILIO_CONTENT_SID_*` env vars; when they are
-blank the app falls back to free-form bodies, which only deliver in the
-sandbox. Leave the Twilio credentials blank entirely and messages are logged
-instead of sent.
+`MESSAGING_CHANNEL` selects the transport:
+
+- **`sms`** — plain text messages from `TWILIO_SMS_NUMBER`. No Meta approval
+  and no message templates, so this is the **fastest path to production**
+  (buy a number in the Twilio console; US senders need toll-free
+  verification or A2P 10DLC registration — a console form, typically days).
+- **`whatsapp`** (default) — see **TWILIO_SETUP.md**: Part A–C for sandbox
+  testing, Part D for the production sender + the three Meta-approved
+  templates (`TWILIO_CONTENT_SID_*`). When the SIDs are blank the app falls
+  back to free-form bodies, which only deliver in the sandbox.
+
+The two channels share all message wording and links, so you can launch on
+SMS today and flip to WhatsApp later by changing `MESSAGING_CHANNEL` — no
+code changes. Leave the Twilio credentials blank entirely and messages are
+logged instead of sent.
 
 ## Understaffing alerts (Cloud Scheduler)
 

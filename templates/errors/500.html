@@ -1,19 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Something went wrong</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4">
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-md w-full p-8 text-center">
-    <div class="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4 text-2xl">!</div>
-    <h1 class="text-xl font-semibold text-slate-900 mb-1">Something went wrong</h1>
-    <p class="text-slate-500 text-sm">
-      Sorry — an unexpected error occurred. Please try again in a moment,
-      or contact your coordinator if it keeps happening.
-    </p>
+{% extends "worker/_layout.html" %}
+{% block title %}Something went wrong · Shift Scheduler{% endblock %}
+{% block card %}
+<div class="h-1.5 bg-gradient-to-r from-rose-400 to-orange-400"></div>
+<div class="p-7 text-center">
+  <div class="w-16 h-16 rounded-full bg-rose-50 flex items-center justify-center mx-auto mb-4">
+    <svg class="w-8 h-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
   </div>
-</body>
-</html>
+  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">Something went wrong</h1>
+  <p class="text-sm text-slate-500">
+    We hit an unexpected error. Please try again in a moment — if it keeps
+    happening, contact your coordinator.
+  </p>
+</div>
+{% endblock %}

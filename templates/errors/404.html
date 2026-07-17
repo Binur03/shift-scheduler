@@ -1,19 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Link not found</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4">
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-200 max-w-md w-full p-8 text-center">
-    <div class="w-14 h-14 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-4 text-2xl">?</div>
-    <h1 class="text-xl font-semibold text-slate-900 mb-1">This link isn't valid</h1>
-    <p class="text-slate-500 text-sm">
-      The page you're looking for doesn't exist or the link has expired.
-      If you got here from a WhatsApp message, contact your coordinator.
-    </p>
+{% extends "worker/_layout.html" %}
+{% block title %}Page not found · Shift Scheduler{% endblock %}
+{% block card %}
+<div class="h-1.5 bg-gradient-to-r from-slate-300 to-slate-400"></div>
+<div class="p-7 text-center">
+  <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+    <svg class="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
   </div>
-</body>
-</html>
+  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">This link isn't valid</h1>
+  <p class="text-sm text-slate-500">
+    The page you're looking for doesn't exist or the link has expired.
+    If you got here from a text message, contact your coordinator.
+  </p>
+</div>
+{% endblock %}
