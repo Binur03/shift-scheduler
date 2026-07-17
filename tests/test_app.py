@@ -11,7 +11,7 @@ from models import AssignmentStatus, ShiftAssignment, ShiftStatus
 # Health & auth
 # --------------------------------------------------------------------------- #
 def test_healthz_ok(client):
-    resp = client.get("/healthz")
+    resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.get_json()["status"] == "ok"
 

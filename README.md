@@ -190,8 +190,9 @@ The window is configurable with `ALERT_WINDOW_MIN_HOURS` /
 
 ## Observability
 
-- `/healthz` probes the database (`SELECT 1`) and returns 503 if it's
-  unreachable.
+- `/health` probes the database (`SELECT 1`) and returns 503 if it's
+  unreachable. (The conventional `/healthz` path is reserved by Google's
+  frontend on `*.run.app` domains — it never reaches the app.)
 - Set `SENTRY_DSN` to enable error reporting via Sentry; `LOG_LEVEL`
   controls log verbosity (default INFO). Cloud Run captures stdout/stderr
   into Cloud Logging automatically.

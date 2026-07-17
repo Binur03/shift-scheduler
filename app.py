@@ -87,7 +87,9 @@ def create_app(config_object: type | None = None) -> Flask:
     def index():
         return redirect(url_for("admin.list_shifts"))
 
-    @app.route("/healthz")
+    # Note: /healthz is reserved by Google's frontend on *.run.app domains
+    # (it serves its own 404 for that path), so the probe lives at /health.
+    @app.route("/health")
     def healthz():
         try:
             db.session.execute(text("SELECT 1"))
