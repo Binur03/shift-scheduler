@@ -59,8 +59,8 @@
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
       </span>
       <div>
-        <h2 class="font-semibold text-slate-900">Create a shift</h2>
-        <p class="text-xs text-slate-500">Pick the job, day, and how many workers you need.</p>
+        <h2 class="font-semibold text-slate-900">Create shifts</h2>
+        <p class="text-xs text-slate-500">One day, or a whole range — pick the days of the week it repeats on.</p>
       </div>
     </div>
     {% if not jobs %}
@@ -85,13 +85,13 @@
         </select>
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Date</span>
+        <span class="text-xs font-medium text-slate-600">First day</span>
         <input name="date" type="date" required
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Workers needed</span>
-        <input name="required_headcount" type="number" min="1" placeholder="e.g. 3"
+        <span class="text-xs font-medium text-slate-600">Last day <span class="text-slate-400 font-normal">(optional — same day if blank)</span></span>
+        <input name="end_date" type="date"
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
       <label class="block">
@@ -104,9 +104,28 @@
         <input name="end_time" type="time" required
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Workers needed</span>
+        <input name="required_headcount" type="number" min="1" placeholder="e.g. 3"
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <div class="block">
+        <span class="text-xs font-medium text-slate-600">Repeat on <span class="text-slate-400 font-normal">(for ranges)</span></span>
+        <div class="mt-1.5 flex flex-wrap gap-1.5">
+          {% for wd, label in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri'),(5,'Sat'),(6,'Sun')] %}
+          <label class="cursor-pointer">
+            <input type="checkbox" name="weekdays" value="{{ wd }}" checked class="peer sr-only" />
+            <span class="inline-block px-2 py-1 rounded-md text-xs font-semibold border border-slate-200 text-slate-400
+                         peer-checked:bg-indigo-600 peer-checked:border-indigo-600 peer-checked:text-white transition select-none">
+              {{ label }}
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
       <button class="col-span-2 inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-        Create shift
+        Create shift(s)
       </button>
     </form>
     {% endif %}

@@ -104,6 +104,66 @@ def test_accepted_worker_cannot_decline(client, seed):
 # --------------------------------------------------------------------------- #
 # Admin dispatch
 # --------------------------------------------------------------------------- #
+def test_create_shifts_over_range(admin_client, seed):
+    """A date range + weekday filter creates one shift per matching day."""
+    from datetime import date, timedelta
+
+    from models import Shift
+
+    # Next Monday through Sunday, weekdays Mon/Wed/Fri only -> 3 shifts.
+    monday = date.today() + timedelta(days=(7 - date.today().weekday()))
+    resp = admin_client.post(
+        "/admin/shifts",
+        data={
+            "job_id": seed["job"].id,
+            "date": monday.isoformat(),
+            "end_date": (monday + timedelta(days=6)).isoformat(),
+            "start_time": "09:00",
+            "end_time": "17:00",
+            "required_headcount": "2",
+            "weekdays": ["0", "2", "4"],
+        },
+    )
+    assert resp.status_code == 302
+    created = Shift.query.filter(Shift.date >= monday).all()
+    assert len(created) == 3
+    assert sorted(s.date.weekday() for s in created) == [0, 2, 4]
+
+    # Re-submitting the same range creates nothing new (duplicates skipped).
+    admin_client.post(
+        "/admin/shifts",
+        data={
+            "job_id": seed["job"].id,
+            "date": monday.isoformat(),
+            "end_date": (monday + timedelta(days=6)).isoformat(),
+            "start_time": "09:00",
+            "end_time": "17:00",
+            "weekdays": ["0", "2", "4"],
+        },
+    )
+    assert Shift.query.filter(Shift.date >= monday).count() == 3
+
+
+def test_create_shift_range_rejects_bad_dates(admin_client, seed):
+    from datetime import date, timedelta
+
+    from models import Shift
+
+    before = Shift.query.count()
+    resp = admin_client.post(
+        "/admin/shifts",
+        data={
+            "job_id": seed["job"].id,
+            "date": date.today().isoformat(),
+            "end_date": (date.today() - timedelta(days=3)).isoformat(),
+            "start_time": "09:00",
+            "end_time": "17:00",
+        },
+    )
+    assert resp.status_code == 302
+    assert Shift.query.count() == before
+
+
 def test_dispatch_is_idempotent(admin_client, seed):
     shift = seed["shift"]
     before = ShiftAssignment.query.filter_by(shift_id=shift.id).count()

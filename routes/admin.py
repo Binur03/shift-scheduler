@@ -209,33 +209,79 @@ def list_shifts():
 
 @admin_bp.route("/shifts", methods=["POST"])
 def create_shift():
+    """Create one shift, or the same shift across a date range.
+
+    ``date`` is the first (or only) day. An optional ``end_date`` extends it
+    to every day through that date, filtered by the ``weekdays`` checkboxes
+    (0=Mon .. 6=Sun; none checked means every day). Duplicate job/date/time
+    combinations are skipped rather than doubled.
+    """
     job = db.session.get(Job, int(request.form["job_id"])) or abort(400)
-    shift_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
+    first_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
     start_time = datetime.strptime(request.form["start_time"], "%H:%M").time()
     end_time = datetime.strptime(request.form["end_time"], "%H:%M").time()
+    headcount = int(request.form.get("required_headcount") or job.default_headcount)
 
-    # Guard against accidental duplicates (double-click, refresh-resubmit).
-    existing = Shift.query.filter_by(
-        job_id=job.id, date=shift_date, start_time=start_time, end_time=end_time
-    ).first()
-    if existing:
-        flash("That shift already exists — showing it below.", "error")
-        return redirect(url_for("admin.shift_detail", shift_id=existing.id))
-
-    shift = Shift(
-        job_id=job.id,
-        date=shift_date,
-        start_time=start_time,
-        end_time=end_time,
-        required_headcount=int(
-            request.form.get("required_headcount") or job.default_headcount
-        ),
-        status=ShiftStatus.OPEN,
+    end_raw = (request.form.get("end_date") or "").strip()
+    last_date = (
+        datetime.strptime(end_raw, "%Y-%m-%d").date() if end_raw else first_date
     )
-    db.session.add(shift)
+    if last_date < first_date:
+        flash("The end date is before the start date.", "error")
+        return redirect(url_for("admin.list_shifts"))
+    if (last_date - first_date).days > 31:
+        flash("Date range too large — pick 31 days or fewer at a time.", "error")
+        return redirect(url_for("admin.list_shifts"))
+
+    checked = request.form.getlist("weekdays")
+    allowed_weekdays = {int(w) for w in checked} if checked else set(range(7))
+
+    dates = [
+        first_date + timedelta(days=i)
+        for i in range((last_date - first_date).days + 1)
+        if (first_date + timedelta(days=i)).weekday() in allowed_weekdays
+    ]
+    if not dates:
+        flash("No days in that range match the selected weekdays.", "error")
+        return redirect(url_for("admin.list_shifts"))
+
+    created_shifts = []
+    skipped = 0
+    for d in dates:
+        exists = Shift.query.filter_by(
+            job_id=job.id, date=d, start_time=start_time, end_time=end_time
+        ).first()
+        if exists:
+            skipped += 1
+            continue
+        shift = Shift(
+            job_id=job.id,
+            date=d,
+            start_time=start_time,
+            end_time=end_time,
+            required_headcount=headcount,
+            status=ShiftStatus.OPEN,
+        )
+        db.session.add(shift)
+        created_shifts.append(shift)
     db.session.commit()
-    flash("Shift created.", "success")
-    return redirect(url_for("admin.shift_detail", shift_id=shift.id))
+
+    if len(dates) == 1:
+        if not created_shifts:
+            existing = Shift.query.filter_by(
+                job_id=job.id, date=dates[0], start_time=start_time, end_time=end_time
+            ).first()
+            flash("That shift already exists — showing it below.", "error")
+            return redirect(url_for("admin.shift_detail", shift_id=existing.id))
+        flash("Shift created.", "success")
+        return redirect(url_for("admin.shift_detail", shift_id=created_shifts[0].id))
+
+    flash(
+        f"Created {len(created_shifts)} shift(s) from {first_date} to {last_date}"
+        + (f" ({skipped} already existed)." if skipped else "."),
+        "success" if created_shifts else "error",
+    )
+    return redirect(url_for("admin.list_shifts"))
 
 
 @admin_bp.route("/shifts/<int:shift_id>")
