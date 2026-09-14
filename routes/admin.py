@@ -33,6 +33,9 @@ from utils.sms import ShiftBroadcastDetails, WhatsAppService
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
+# Upper bound on dates picked in one "Create shifts" submit (about two months).
+MAX_DATES_PER_BATCH = 62
+
 
 @admin_bp.before_request
 def require_admin():
@@ -204,45 +207,39 @@ def list_shifts():
         this_monday=this_monday,
         next_monday=this_monday + timedelta(days=7),
         active_workers=Employee.query.filter_by(is_active=True).count(),
+        max_dates=MAX_DATES_PER_BATCH,
     )
 
 
 @admin_bp.route("/shifts", methods=["POST"])
 def create_shift():
-    """Create one shift, or the same shift across a date range.
+    """Create the same shift on each specific date the admin picked.
 
-    ``date`` is the first (or only) day. An optional ``end_date`` extends it
-    to every day through that date, filtered by the ``weekdays`` checkboxes
-    (0=Mon .. 6=Sun; none checked means every day). Duplicate job/date/time
-    combinations are skipped rather than doubled.
+    The calendar picker submits one ``dates`` value per selected day
+    (``YYYY-MM-DD``); a single ``date`` field is also accepted. Duplicate
+    job/date/time combinations are skipped rather than doubled.
     """
     job = db.session.get(Job, int(request.form["job_id"])) or abort(400)
-    first_date = datetime.strptime(request.form["date"], "%Y-%m-%d").date()
     start_time = datetime.strptime(request.form["start_time"], "%H:%M").time()
     end_time = datetime.strptime(request.form["end_time"], "%H:%M").time()
     headcount = int(request.form.get("required_headcount") or job.default_headcount)
 
-    end_raw = (request.form.get("end_date") or "").strip()
-    last_date = (
-        datetime.strptime(end_raw, "%Y-%m-%d").date() if end_raw else first_date
-    )
-    if last_date < first_date:
-        flash("The end date is before the start date.", "error")
+    raw_dates = request.form.getlist("dates") or [request.form.get("date", "")]
+    try:
+        dates = sorted(
+            {datetime.strptime(d.strip(), "%Y-%m-%d").date() for d in raw_dates if d.strip()}
+        )
+    except ValueError:
+        flash("One of the selected dates isn't valid — please pick again.", "error")
         return redirect(url_for("admin.list_shifts"))
-    if (last_date - first_date).days > 31:
-        flash("Date range too large — pick 31 days or fewer at a time.", "error")
-        return redirect(url_for("admin.list_shifts"))
-
-    checked = request.form.getlist("weekdays")
-    allowed_weekdays = {int(w) for w in checked} if checked else set(range(7))
-
-    dates = [
-        first_date + timedelta(days=i)
-        for i in range((last_date - first_date).days + 1)
-        if (first_date + timedelta(days=i)).weekday() in allowed_weekdays
-    ]
     if not dates:
-        flash("No days in that range match the selected weekdays.", "error")
+        flash("Pick at least one date on the calendar.", "error")
+        return redirect(url_for("admin.list_shifts"))
+    if len(dates) > MAX_DATES_PER_BATCH:
+        flash(
+            f"That's {len(dates)} dates — pick {MAX_DATES_PER_BATCH} or fewer at a time.",
+            "error",
+        )
         return redirect(url_for("admin.list_shifts"))
 
     created_shifts = []
@@ -277,7 +274,7 @@ def create_shift():
         return redirect(url_for("admin.shift_detail", shift_id=created_shifts[0].id))
 
     flash(
-        f"Created {len(created_shifts)} shift(s) from {first_date} to {last_date}"
+        f"Created {len(created_shifts)} shift(s) on {len(dates)} selected date(s)"
         + (f" ({skipped} already existed)." if skipped else "."),
         "success" if created_shifts else "error",
     )

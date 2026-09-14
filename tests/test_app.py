@@ -104,63 +104,55 @@ def test_accepted_worker_cannot_decline(client, seed):
 # --------------------------------------------------------------------------- #
 # Admin dispatch
 # --------------------------------------------------------------------------- #
-def test_create_shifts_over_range(admin_client, seed):
-    """A date range + weekday filter creates one shift per matching day."""
+def test_create_shifts_on_picked_dates(admin_client, seed):
+    """Each date picked on the calendar gets exactly one shift."""
     from datetime import date, timedelta
 
     from models import Shift
 
-    # Next Monday through Sunday, weekdays Mon/Wed/Fri only -> 3 shifts.
-    monday = date.today() + timedelta(days=(7 - date.today().weekday()))
+    base = date.today() + timedelta(days=10)
+    picked = [base, base + timedelta(days=3), base + timedelta(days=11)]  # irregular
+    form = {
+        "job_id": seed["job"].id,
+        "dates": [d.isoformat() for d in picked],
+        "start_time": "09:00",
+        "end_time": "17:00",
+        "required_headcount": "2",
+    }
+    resp = admin_client.post("/admin/shifts", data=form)
+    assert resp.status_code == 302
+    created = Shift.query.filter(Shift.date >= base).order_by(Shift.date).all()
+    assert [s.date for s in created] == picked
+    assert all(s.required_headcount == 2 for s in created)
+
+    # Re-submitting the same dates creates nothing new (duplicates skipped).
+    admin_client.post("/admin/shifts", data=form)
+    assert Shift.query.filter(Shift.date >= base).count() == 3
+
+
+def test_create_shift_single_date_goes_to_detail(admin_client, seed):
+    from datetime import date, timedelta
+
     resp = admin_client.post(
         "/admin/shifts",
         data={
             "job_id": seed["job"].id,
-            "date": monday.isoformat(),
-            "end_date": (monday + timedelta(days=6)).isoformat(),
+            "dates": [(date.today() + timedelta(days=5)).isoformat()],
             "start_time": "09:00",
             "end_time": "17:00",
-            "required_headcount": "2",
-            "weekdays": ["0", "2", "4"],
         },
     )
     assert resp.status_code == 302
-    created = Shift.query.filter(Shift.date >= monday).all()
-    assert len(created) == 3
-    assert sorted(s.date.weekday() for s in created) == [0, 2, 4]
-
-    # Re-submitting the same range creates nothing new (duplicates skipped).
-    admin_client.post(
-        "/admin/shifts",
-        data={
-            "job_id": seed["job"].id,
-            "date": monday.isoformat(),
-            "end_date": (monday + timedelta(days=6)).isoformat(),
-            "start_time": "09:00",
-            "end_time": "17:00",
-            "weekdays": ["0", "2", "4"],
-        },
-    )
-    assert Shift.query.filter(Shift.date >= monday).count() == 3
+    assert "/admin/shifts/" in resp.headers["Location"]
 
 
-def test_create_shift_range_rejects_bad_dates(admin_client, seed):
-    from datetime import date, timedelta
-
+def test_create_shift_rejects_missing_or_bad_dates(admin_client, seed):
     from models import Shift
 
     before = Shift.query.count()
-    resp = admin_client.post(
-        "/admin/shifts",
-        data={
-            "job_id": seed["job"].id,
-            "date": date.today().isoformat(),
-            "end_date": (date.today() - timedelta(days=3)).isoformat(),
-            "start_time": "09:00",
-            "end_time": "17:00",
-        },
-    )
-    assert resp.status_code == 302
+    base = {"job_id": seed["job"].id, "start_time": "09:00", "end_time": "17:00"}
+    assert admin_client.post("/admin/shifts", data=base).status_code == 302
+    admin_client.post("/admin/shifts", data={**base, "dates": ["not-a-date"]})
     assert Shift.query.count() == before
 
 
