@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#020617" />
+  <title>{{ 'Check out' if s.state == 'ready_out' else 'Check in' }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    body { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    @keyframes shake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); }
+                       30%, 50%, 70% { transform: translateX(-10px); } 40%, 60% { transform: translateX(10px); } }
+    .shake { animation: shake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
+    @keyframes pop { 0% { transform: scale(.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    .pop { animation: pop .25s ease-out both; }
+    @media (prefers-reduced-motion: reduce) { .shake, .pop { animation: none; } }
+  </style>
+</head>
+<body class="bg-slate-950 text-white antialiased">
+
+{% set ready = s.state in ('ready_in', 'ready_out') %}
+
+<main class="min-h-full flex flex-col items-center px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+
+  {# ---------- Header: the one thing to do ---------- #}
+  <header class="w-full max-w-sm text-center">
+    {% if s.state == 'ready_out' %}
+      <h1 class="text-5xl font-black tracking-tight text-amber-400">CHECK OUT</h1>
+      <p class="mt-2 text-xl font-semibold text-slate-300">In at {{ s.check_in }}</p>
+    {% elif s.state == 'ready_in' %}
+      <h1 class="text-5xl font-black tracking-tight text-emerald-400">CHECK IN</h1>
+    {% endif %}
+    <p class="mt-2 text-lg leading-snug text-slate-400">{{ s.job }}<br><span class="whitespace-nowrap">{{ s.shift_time }}</span></p>
+  </header>
+
+  {% if ready %}
+  {# ---------- PIN dots ---------- #}
+  <section class="w-full max-w-sm mt-8 flex flex-col items-center">
+    <div id="dots" class="flex gap-5" aria-hidden="true">
+      {% for i in range(4) %}
+      <span class="dot w-6 h-6 rounded-full border-[3px] border-slate-400 transition-colors duration-100"></span>
+      {% endfor %}
+    </div>
+    <p id="message" role="alert" aria-live="assertive"
+       class="mt-5 h-10 text-3xl font-black tracking-wide text-center"></p>
+  </section>
+
+  {# ---------- Keypad ---------- #}
+  <section id="keypad" class="w-full max-w-sm mt-auto grid grid-cols-3 gap-3" aria-label="PIN keypad">
+    {% for key in ['1','2','3','4','5','6','7','8','9'] %}
+    <button type="button" data-digit="{{ key }}"
+            class="key h-20 rounded-2xl bg-slate-800 text-4xl font-bold active:bg-slate-500 active:scale-95 transition disabled:opacity-40">{{ key }}</button>
+    {% endfor %}
+    <span></span>
+    <button type="button" data-digit="0"
+            class="key h-20 rounded-2xl bg-slate-800 text-4xl font-bold active:bg-slate-500 active:scale-95 transition disabled:opacity-40">0</button>
+    <button type="button" id="backspace" aria-label="Delete"
+            class="key h-20 rounded-2xl text-slate-300 flex items-center justify-center active:bg-slate-800 active:scale-95 transition disabled:opacity-40">
+      <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75 14.25 12m0 0 2.25 2.25M14.25 12l2.25-2.25M14.25 12 12 14.25m-2.58 4.92-6.374-6.375a1.125 1.125 0 0 1 0-1.59L9.42 4.83c.21-.211.497-.33.795-.33H19.5a2.25 2.25 0 0 1 2.25 2.25v10.5a2.25 2.25 0 0 1-2.25 2.25h-9.284c-.298 0-.585-.119-.795-.33Z" /></svg>
+    </button>
+  </section>
+  {% endif %}
+
+  {# ---------- Non-actionable states (server-rendered) ---------- #}
+  {% if not ready %}
+  <section class="flex-1 flex flex-col items-center justify-center text-center max-w-sm">
+    {% if s.state == 'done' %}
+      <div class="w-32 h-32 rounded-full bg-green-600 flex items-center justify-center">
+        <svg class="w-20 h-20" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+      </div>
+      <h1 class="mt-6 text-5xl font-black">DONE</h1>
+      <p class="mt-4 text-3xl font-bold text-slate-200">IN {{ s.check_in }}</p>
+      <p class="mt-1 text-3xl font-bold text-slate-200">OUT {{ s.check_out }}</p>
+    {% elif s.state == 'too_early' %}
+      <h1 class="text-5xl font-black text-slate-200">TOO EARLY</h1>
+      <p class="mt-4 text-3xl font-bold text-emerald-400">Opens {{ s.opens_at }}</p>
+      <button type="button" onclick="location.reload()"
+              class="mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">REFRESH</button>
+    {% elif s.state == 'locked' %}
+      <h1 class="text-5xl font-black text-red-500">LOCKED</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-300">Try again in 15 min<br>or see your supervisor</p>
+    {% elif s.state == 'ended' %}
+      <h1 class="text-5xl font-black text-slate-300">SHIFT OVER</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-400">See your supervisor</p>
+    {% else %}
+      <h1 class="text-5xl font-black text-slate-300">NOT AVAILABLE</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-400">See your supervisor</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</main>
+
+{# ---------- Full-screen result overlays (shown by JS) ---------- #}
+<div id="success" class="fixed inset-0 bg-green-600 hidden flex-col items-center justify-center text-center px-6" role="status" aria-live="polite">
+  <div class="pop w-40 h-40 rounded-full bg-white/20 flex items-center justify-center">
+    <svg class="w-28 h-28" fill="none" viewBox="0 0 24 24" stroke-width="3.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+  </div>
+  <p id="success-verb" class="mt-8 text-7xl font-black tracking-tight">IN</p>
+  <p id="success-time" class="mt-3 text-5xl font-extrabold"></p>
+  <p id="success-note" class="mt-6 text-2xl font-bold text-green-100"></p>
+</div>
+
+<div id="stop" class="fixed inset-0 bg-slate-950 hidden flex-col items-center justify-center text-center px-6" role="alert">
+  <p id="stop-title" class="text-5xl font-black text-red-500"></p>
+  <p id="stop-detail" class="mt-4 text-2xl font-bold text-slate-300"></p>
+  <button type="button" id="stop-retry" onclick="location.reload()"
+          class="hidden mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">TRY AGAIN</button>
+</div>
+
+{% if ready %}
+<script>
+(() => {
+  const TOKEN = {{ token | tojson }};
+  const ACTION = {{ ('out' if s.state == 'ready_out' else 'in') | tojson }};
+  const PIN_LENGTH = 4;
+
+  const dots = [...document.querySelectorAll('#dots .dot')];
+  const dotRow = document.getElementById('dots');
+  const message = document.getElementById('message');
+  const keys = [...document.querySelectorAll('#keypad .key')];
+  let pin = '';
+  let busy = false;
+
+  function renderDots(color = 'bg-white border-white') {
+    dots.forEach((dot, i) => {
+      dot.className = 'dot w-6 h-6 rounded-full border-[3px] transition-colors duration-100 ' +
+        (i < pin.length ? color : 'border-slate-400');
+    });
+  }
+
+  function setBusy(value) {
+    busy = value;
+    keys.forEach(k => { k.disabled = value; });
+  }
+
+  function buzz(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
+
+  function press(digit) {
+    if (busy || pin.length >= PIN_LENGTH) return;
+    message.textContent = '';
+    pin += digit;
+    renderDots();
+    if (pin.length === PIN_LENGTH) submit();
+  }
+
+  function backspace() {
+    if (busy) return;
+    pin = pin.slice(0, -1);
+    message.textContent = '';
+    renderDots();
+  }
+
+  function wrongPin(attemptsLeft) {
+    buzz([80, 60, 80]);
+    renderDots('bg-red-500 border-red-500');
+    message.className = 'mt-5 h-10 text-3xl font-black tracking-wide text-center text-red-500';
+    message.textContent = attemptsLeft != null && attemptsLeft <= 2
+      ? `WRONG PIN · ${attemptsLeft} LEFT` : 'WRONG PIN';
+    dotRow.classList.remove('shake');
+    void dotRow.offsetWidth;            // restart the animation
+    dotRow.classList.add('shake');
+    setTimeout(() => { pin = ''; renderDots(); setBusy(false); }, 650);
+  }
+
+  function showSuccess(body) {
+    buzz(200);
+    const isOut = body.status === 'checked_out' || body.status === 'already_checked_out';
+    document.getElementById('success-verb').textContent = isOut ? 'OUT' : 'IN';
+    document.getElementById('success-time').textContent = body.time || '';
+    document.getElementById('success-note').textContent =
+      body.status.startsWith('already') ? 'Already recorded' : (body.worker_first_name || '');
+    const panel = document.getElementById('success');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+  }
+
+  function showStop(title, detail, retry = false) {
+    buzz([80, 60, 80]);
+    document.getElementById('stop-title').textContent = title;
+    document.getElementById('stop-detail').textContent = detail;
+    document.getElementById('stop-retry').classList.toggle('hidden', !retry);
+    const panel = document.getElementById('stop');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+  }
+
+  const CONFLICTS = {
+    too_early: b => ['TOO EARLY', `Opens ${b.opens_at || ''}`, true],
+    shift_ended: () => ['SHIFT OVER', 'See your supervisor'],
+    not_checked_in: () => ['NOT CHECKED IN', 'See your supervisor'],
+    checked_in_elsewhere: () => ['STILL ON SHIFT', 'Check out of your other shift first'],
+    not_available: () => ['NOT AVAILABLE', 'See your supervisor'],
+  };
+
+  async function submit() {
+    setBusy(true);
+    renderDots('bg-slate-400 border-slate-400');
+    let response, body = {};
+    try {
+      response = await fetch('/api/punch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: TOKEN, pin, action: ACTION }),
+        cache: 'no-store',
+        credentials: 'omit',
+      });
+      body = await response.json().catch(() => ({}));
+    } catch (err) {
+      pin = ''; renderDots(); setBusy(false);
+      message.className = 'mt-5 h-10 text-2xl font-black tracking-wide text-center text-amber-400';
+      message.textContent = 'NO CONNECTION · TRY AGAIN';
+      buzz([80, 60, 80]);
+      return;
+    }
+
+    if (response.ok) return showSuccess(body);
+    switch (response.status) {
+      case 401: return wrongPin(body.attempts_left);
+      case 423: return showStop('LOCKED', 'Try again in 15 min or see your supervisor');
+      case 409: {
+        const [title, detail, retry] = (CONFLICTS[body.error] || CONFLICTS.not_available)(body);
+        return showStop(title, detail, retry);
+      }
+      case 404: return showStop('LINK NOT VALID', 'See your supervisor');
+      case 429: return showStop('TOO MANY TRIES', 'Wait a minute', true);
+      case 503: return showStop('SYSTEM DOWN', 'See your supervisor', true);
+      default:  return showStop('ERROR', 'Try again', true);
+    }
+  }
+
+  keys.forEach(key => {
+    key.addEventListener('click', () => {
+      if (key.id === 'backspace') backspace(); else press(key.dataset.digit);
+    });
+  });
+  document.addEventListener('keydown', e => {
+    if (/^[0-9]$/.test(e.key)) press(e.key);
+    else if (e.key === 'Backspace') backspace();
+  });
+})();
+</script>
+{% endif %}
+</body>
+</html>

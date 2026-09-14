@@ -327,11 +327,14 @@ class WhatsAppService:
         work_date: date,
         start_time: time,
         end_time: time,
+        punch_url: str | None = None,
     ) -> bool:
         """Remind one confirmed worker about their upcoming shift.
 
         Template variables: {{1}} job title, {{2}} location, {{3}} date,
-        {{4}} time range.
+        {{4}} time range. ``punch_url`` (the PIN check-in keypad link) is
+        included in the SMS / free-form body; the approved WhatsApp template
+        has no slot for it yet.
         """
         date_text = f"{work_date:%a %d %b}"
         time_text = f"{start_time:%H:%M}-{end_time:%H:%M}"
@@ -339,7 +342,8 @@ class WhatsAppService:
             f"Reminder: you're confirmed for {title}\n"
             f"Location: {location_address}\n"
             f"{date_text} {time_text}\n\n"
-            "If you can no longer make it, contact your coordinator ASAP."
+            + (f"Check in when you arrive: {punch_url}\n\n" if punch_url else "")
+            + "If you can no longer make it, contact your coordinator ASAP."
         )
         return self._send(
             phone,

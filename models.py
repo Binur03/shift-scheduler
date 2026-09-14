@@ -68,6 +68,14 @@ class ShiftSource:
     EMAIL = "email"
 
 
+class PunchSource:
+    """How a check-in/out timestamp was recorded (payroll audit)."""
+
+    SMS = "sms"
+    WEB = "web"  # PIN keypad at /punch/<token>
+    ADMIN = "admin"
+
+
 class PunchResult:
     """Outcome recorded for every inbound SMS (``InboundSms.result``)."""
 
@@ -123,6 +131,10 @@ class Employee(db.Model):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="1"
     )
+    # Keyed hash of the worker's 4-digit check-in PIN (never the PIN itself):
+    # HMAC-SHA256(PIN_PEPPER, "<id>:<pin>") hex. See utils/pins.py.
+    pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pin_set_at_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     assignments: Mapped[list["ShiftAssignment"]] = relationship(
         back_populates="employee",
@@ -351,6 +363,18 @@ class ShiftAssignment(db.Model):
     check_out_at_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     check_in_message_sid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     check_out_message_sid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    check_in_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    check_out_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    # Web PIN punch: secret per-assignment link, issued when the worker accepts.
+    punch_token: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    # Brute-force guard for that link (updated under the punch row lock).
+    pin_failed_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    pin_locked_until_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     shift: Mapped["Shift"] = relationship(back_populates="assignments")
     employee: Mapped["Employee"] = relationship(back_populates="assignments")

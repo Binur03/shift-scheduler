@@ -22,6 +22,7 @@ os.environ["TWILIO_ACCOUNT_SID"] = TWILIO_TEST_SID
 os.environ["INBOUND_EMAIL_USERNAME"] = "sendgrid"
 os.environ["INBOUND_EMAIL_PASSWORD"] = "test-inbound-pass"
 os.environ["PUNCH_EARLY_MINUTES"] = "60"
+os.environ["PIN_PEPPER"] = "test-pin-pepper-not-for-production"
 
 from twilio.request_validator import RequestValidator  # noqa: E402
 

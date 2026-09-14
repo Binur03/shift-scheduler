@@ -50,6 +50,7 @@ from models import (
     Employee,
     InboundSms,
     PunchResult,
+    PunchSource,
     Shift,
     ShiftAssignment,
     ShiftStatus,
@@ -183,12 +184,11 @@ def _punch_in(employee: Employee, message_sid: str, now_utc: datetime) -> PunchO
     early = _early_window()
     for assignment in candidates:
         shift = assignment.shift
-        start_utc, end_utc = shift_window_utc(
-            shift.date, shift.start_time, shift.end_time, shift.job.timezone
-        )
-        if start_utc - early <= now_utc <= end_utc:
+        opens_at, _start, end_utc = check_in_window_utc(assignment)
+        if opens_at <= now_utc <= end_utc:
             assignment.check_in_at_utc = now_utc
             assignment.check_in_message_sid = message_sid
+            assignment.check_in_source = PunchSource.SMS
             return PunchOutcome(
                 PunchResult.CHECKED_IN,
                 f"Checked in for {shift.job.title} at "
@@ -211,6 +211,7 @@ def _punch_out(employee: Employee, message_sid: str, now_utc: datetime) -> Punch
         shift = open_punch.shift
         open_punch.check_out_at_utc = now_utc
         open_punch.check_out_message_sid = message_sid
+        open_punch.check_out_source = PunchSource.SMS
         return PunchOutcome(
             PunchResult.CHECKED_OUT,
             f"Checked out of {shift.job.title} at "
@@ -249,6 +250,56 @@ def _is_retryable(exc: OperationalError) -> bool:
     return bool(args) and args[0] in _RETRYABLE_MYSQL_ERRORS
 
 
+# --------------------------------------------------------------------------- #
+# Shared by SMS punches and web PIN punches (utils/web_punch.py)
+# --------------------------------------------------------------------------- #
+def check_in_window_utc(assignment: ShiftAssignment) -> tuple[datetime, datetime, datetime]:
+    """(check-in opens, scheduled start, scheduled end) for an assignment, naive UTC."""
+    shift = assignment.shift
+    start_utc, end_utc = shift_window_utc(
+        shift.date, shift.start_time, shift.end_time, shift.job.timezone
+    )
+    return start_utc - _early_window(), start_utc, end_utc
+
+
+def open_punch_for(employee_id: int) -> ShiftAssignment | None:
+    """Locked read of the assignment a worker is currently checked in to."""
+    return _open_punch(employee_id)
+
+
+def lock_employee(employee_id: int) -> Employee:
+    """Per-worker mutex. Always taken BEFORE any assignment row lock."""
+    return (
+        db.session.query(Employee)
+        .filter(Employee.id == employee_id)
+        .with_for_update()
+        .populate_existing()  # refresh any stale identity-map copy from the locked row
+        .one()
+    )
+
+
+def run_with_deadlock_retry(fn, label: str):
+    """Run a punch transaction, retrying InnoDB deadlocks / lock-wait timeouts.
+
+    ``fn`` must be self-contained (start from fresh reads and commit itself);
+    it is re-run from scratch after a rollback, which is safe because nothing
+    from the failed attempt was committed.
+    """
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return fn()
+        except OperationalError as exc:
+            db.session.rollback()
+            if not _is_retryable(exc) or attempt == MAX_ATTEMPTS:
+                raise
+            logger.warning(
+                "Punch %s hit InnoDB error %s; retrying (attempt %d).",
+                label, exc.orig.args[0], attempt,
+            )
+            time.sleep(0.02 * attempt)
+    raise AssertionError("unreachable")
+
+
 def handle_inbound_sms(
     *,
     message_sid: str,
@@ -264,21 +315,12 @@ def handle_inbound_sms(
     """
     now_utc = now_utc or utcnow_naive()
     body = (body or "")[:MAX_BODY_CHARS]
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            return _process_once(
-                message_sid=message_sid, from_number=from_number, body=body, now_utc=now_utc
-            )
-        except OperationalError as exc:
-            db.session.rollback()
-            if not _is_retryable(exc) or attempt == MAX_ATTEMPTS:
-                raise
-            logger.warning(
-                "Punch %s hit InnoDB error %s; retrying (attempt %d).",
-                message_sid, exc.orig.args[0], attempt,
-            )
-            time.sleep(0.02 * attempt)
-    raise AssertionError("unreachable")
+    return run_with_deadlock_retry(
+        lambda: _process_once(
+            message_sid=message_sid, from_number=from_number, body=body, now_utc=now_utc
+        ),
+        label=message_sid,
+    )
 
 
 def _process_once(
@@ -308,12 +350,7 @@ def _process_once(
             _log(**log_kwargs, outcome=outcome, employee_id=employee.id)
         else:
             # (1) Per-worker mutex. Concurrent punches for this worker wait here.
-            locked = (
-                db.session.query(Employee)
-                .filter(Employee.id == employee.id)
-                .with_for_update()
-                .one()
-            )
+            locked = lock_employee(employee.id)
             # (2) Assignment rows are locked inside _punch_in / _punch_out.
             if command == "IN":
                 outcome = _punch_in(locked, message_sid, now_utc)

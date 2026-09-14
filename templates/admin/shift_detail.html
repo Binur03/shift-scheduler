@@ -153,7 +153,13 @@
               <span>Copy link</span>
             </button>
           </td>
-          <td class="px-6 py-3.5 text-right">
+          <td class="px-6 py-3.5 text-right whitespace-nowrap">
+            {% if a.status.value == 'accepted' %}
+            <form method="post" action="{{ url_for('admin.issue_punch_link', assignment_id=a.id) }}" class="inline mr-3">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button class="text-xs font-medium text-indigo-600 hover:text-indigo-500 hover:underline">Punch link</button>
+            </form>
+            {% endif %}
             {% if a.status.value in ('accepted', 'pending') %}
             <form method="post" action="{{ url_for('admin.cancel_assignment', assignment_id=a.id) }}"
                   onsubmit="return confirm('Remove {{ a.employee.first_name }} from this shift? Their seat reopens.');">

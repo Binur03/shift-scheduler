@@ -74,6 +74,7 @@ ensure_secret() {
 }
 ensure_secret inbound-email-username
 ensure_secret inbound-email-password
+ensure_secret pin-pepper  # never rotate casually: it invalidates every worker PIN
 gc secrets describe twilio-auth-token >/dev/null 2>&1 || die "secret twilio-auth-token is missing"
 
 # --------------------------------------------------------------------------- #
@@ -98,7 +99,7 @@ gc run deploy "$SERVICE" \
   --no-traffic \
   --tag=candidate \
   --update-env-vars="PUNCH_EARLY_MINUTES=${PUNCH_EARLY_MINUTES:-60}" \
-  --update-secrets="TWILIO_AUTH_TOKEN=twilio-auth-token:latest,INBOUND_EMAIL_USERNAME=inbound-email-username:latest,INBOUND_EMAIL_PASSWORD=inbound-email-password:latest"
+  --update-secrets="TWILIO_AUTH_TOKEN=twilio-auth-token:latest,INBOUND_EMAIL_USERNAME=inbound-email-username:latest,INBOUND_EMAIL_PASSWORD=inbound-email-password:latest,PIN_PEPPER=pin-pepper:latest"
 
 CANDIDATE_URL="$(gc run services describe "$SERVICE" --region="$REGION" --format=json \
   | "$PYTHON" -c 'import json,sys; print(next(t["url"] for t in json.load(sys.stdin)["status"]["traffic"] if t.get("tag")=="candidate"))')" \

@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, Response, abort, render_template
+from flask import Blueprint, Response, abort, jsonify, make_response, render_template, request
 from sqlalchemy import func
 
-from extensions import db
-from models import AssignmentStatus, Shift, ShiftAssignment, ShiftStatus
+from extensions import db, limiter
+from models import AssignmentStatus, Shift, ShiftAssignment, ShiftStatus, utcnow_naive
+from utils.web_punch import ensure_punch_token, shift_summary, web_punch
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ def accept_offer(token: str) -> Response | str | tuple[str, int]:
 
         # (3b) Capacity available: accept this worker.
         assignment.status = AssignmentStatus.accepted
+        ensure_punch_token(assignment)  # secret link for the PIN check-in keypad
         if current_accepted_count + 1 >= shift.required_headcount:
             shift.status = ShiftStatus.FILLED
 
@@ -188,3 +190,54 @@ def decline_offer(token: str) -> Response | str:
     return render_template(
         "worker/declined.html", assignment=assignment, shift=assignment.shift
     )
+
+
+# --------------------------------------------------------------------------- #
+# Mobile PIN check-in / check-out
+# --------------------------------------------------------------------------- #
+def _private(response: Response) -> Response:
+    """The punch URL is a credential: keep it out of caches, referrers, indexes."""
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@worker_bp.route("/punch/<token>", methods=["GET"])
+@limiter.limit("60 per minute")
+def punch_page(token: str):
+    """Render the keypad for one confirmed shift."""
+    assignment = (
+        ShiftAssignment.query.filter_by(punch_token=token).first() if len(token) <= 64 else None
+    )
+    if assignment is None:
+        return _private(make_response(render_template("errors/404.html"), 404))
+    summary = shift_summary(assignment, utcnow_naive())
+    return _private(make_response(render_template("worker/punch.html", token=token, s=summary)))
+
+
+@worker_bp.route("/api/punch", methods=["POST"])
+@limiter.limit("30 per minute")
+def api_punch():
+    """JSON: {"token": str, "pin": "1234", "action": "in"|"out"}.
+
+    CSRF-exempt by design (blueprint): there is no session or cookie to ride —
+    the token + PIN in the body are the credentials. JSON-only, so a plain
+    cross-site HTML form can't submit here.
+    """
+    if not request.is_json:
+        return _private(jsonify(error="json_required")), 415
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _private(jsonify(error="bad_request")), 400
+
+    result = web_punch(
+        token=str(data.get("token") or ""),
+        pin=data.get("pin"),
+        action=data.get("action"),
+        client_ip=request.remote_addr,
+    )
+    response = _private(jsonify(result.body))
+    if result.http_status == 423:
+        response.headers["Retry-After"] = str(result.body.get("retry_after_seconds", 900))
+    return response, result.http_status

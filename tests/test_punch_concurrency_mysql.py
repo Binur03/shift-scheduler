@@ -175,6 +175,92 @@ def test_in_and_out_racing_for_same_worker_leave_consistent_state(mysql_app, wor
         assert sum(results.values()) == THREADS
 
 
+def _web_setup(mysql_app, world, phone_index: int, pin: str = "4821") -> tuple[str, int]:
+    """Give one worker a PIN and their assignment a punch token."""
+    from utils.pins import hash_pin
+    from utils.web_punch import ensure_punch_token
+
+    with mysql_app.app_context():
+        employee = Employee.query.filter_by(phone_number=world["phones"][phone_index]).one()
+        employee.pin_hash = hash_pin(employee.id, pin)
+        assignment = ShiftAssignment.query.filter_by(employee_id=employee.id).one()
+        token = ensure_punch_token(assignment)
+        db.session.commit()
+        return token, assignment.id
+
+
+def _fire_json_concurrently(app, payloads: list[dict]) -> list:
+    barrier = threading.Barrier(len(payloads))
+
+    def send(payload):
+        client = app.test_client()
+        barrier.wait()
+        return client.post("/api/punch", json=payload)
+
+    with ThreadPoolExecutor(max_workers=len(payloads)) as pool:
+        return list(pool.map(send, payloads))
+
+
+def test_web_pin_double_taps_check_in_exactly_once(mysql_app, world):
+    """16 simultaneous correct-PIN 'in' taps -> 1 checked_in, 15 already_checked_in, one timestamp."""
+    token, assignment_id = _web_setup(mysql_app, world, phone_index=3)
+    responses = _fire_json_concurrently(
+        mysql_app, [{"token": token, "pin": "4821", "action": "in"} for _ in range(THREADS)]
+    )
+    assert all(r.status_code == 200 for r in responses), [r.status_code for r in responses]
+    statuses = Counter(r.get_json()["status"] for r in responses)
+    assert statuses == {"checked_in": 1, "already_checked_in": THREADS - 1}
+    assert len({r.get_json()["time"] for r in responses}) == 1  # everyone sees the one real timestamp
+
+
+def test_parallel_wrong_pins_cannot_exceed_lockout(mysql_app, world):
+    """16 simultaneous wrong guesses: the attempt counter is updated under the row
+    lock, so exactly 4 get 'wrong_pin' and the 5th locks — no lost updates."""
+    from utils.web_punch import MAX_PIN_ATTEMPTS
+
+    token, assignment_id = _web_setup(mysql_app, world, phone_index=4)
+    responses = _fire_json_concurrently(
+        mysql_app, [{"token": token, "pin": "0001", "action": "in"} for _ in range(THREADS)]
+    )
+    codes = Counter(r.status_code for r in responses)
+    assert codes == {401: MAX_PIN_ATTEMPTS - 1, 423: THREADS - (MAX_PIN_ATTEMPTS - 1)}
+    with mysql_app.app_context():
+        assignment = db.session.get(ShiftAssignment, assignment_id)
+        assert assignment.pin_locked_until_utc is not None
+        assert assignment.check_in_at_utc is None
+
+
+def test_sms_and_web_racing_for_same_shift_check_in_once(mysql_app, world):
+    """8 SMS 'IN' + 8 keypad 'in' for one worker at once: one timestamp, never overwritten."""
+    token, assignment_id = _web_setup(mysql_app, world, phone_index=5)
+    phone = world["phones"][5]
+    barrier = threading.Barrier(16)
+
+    def sms():
+        params = sms_params("IN", from_=phone)
+        headers = {"X-Twilio-Signature": twilio_signature(mysql_app, params)}
+        client = mysql_app.test_client()
+        barrier.wait()
+        return client.post(SMS_PATH, data=params, headers=headers).status_code
+
+    def web():
+        client = mysql_app.test_client()
+        barrier.wait()
+        return client.post("/api/punch", json={"token": token, "pin": "4821", "action": "in"}).status_code
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        futures = [pool.submit(sms) for _ in range(8)] + [pool.submit(web) for _ in range(8)]
+        codes = [f.result() for f in futures]
+
+    assert all(code == 200 for code in codes), codes
+    with mysql_app.app_context():
+        assignment = db.session.get(ShiftAssignment, assignment_id)
+        assert assignment.check_in_at_utc is not None
+        sms_wins = InboundSms.query.filter_by(result=PunchResult.CHECKED_IN, employee_id=assignment.employee_id).count()
+        assert (sms_wins == 1) == (assignment.check_in_source == "sms")
+        assert sms_wins <= 1
+
+
 def test_out_storm_across_workers_survives_gap_lock_deadlocks(mysql_app, world):
     """All workers check in, then all check out simultaneously; deadlock retries keep every OUT."""
     _fire_concurrently(mysql_app, [sms_params("IN", from_=p) for p in world["phones"]])

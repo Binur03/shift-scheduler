@@ -37,8 +37,10 @@ from models import (
     utcnow_naive,
 )
 from utils.cli import normalize_e164
+from utils.pins import PinConfigError, set_new_pin
 from utils.sms import ShiftBroadcastDetails, WhatsAppService
 from utils.timeutil import is_valid_timezone, shift_window_utc, utc_naive_to_local
+from utils.web_punch import punch_url
 
 # Venue timezones offered in the Jobs form (any valid IANA name is accepted).
 VENUE_TIMEZONES = [
@@ -108,11 +110,49 @@ def create_employee():
     db.session.add(employee)
     try:
         db.session.commit()
-        flash("Employee added.", "success")
     except IntegrityError:
         db.session.rollback()
         flash("That phone number already exists.", "error")
+        return redirect(url_for("admin.list_employees"))
+
+    _issue_pin_and_flash(employee, "Employee added.")
     return redirect(url_for("admin.list_employees"))
+
+
+def _issue_pin_and_flash(employee: Employee, prefix: str) -> None:
+    """Set a fresh check-in PIN and show it to the admin exactly once."""
+    try:
+        pin = set_new_pin(employee)
+        db.session.commit()
+    except PinConfigError:
+        db.session.rollback()
+        flash(f"{prefix} No check-in PIN was set: PIN_PEPPER isn't configured on the server.", "error")
+        return
+    flash(
+        f"{prefix} {employee.full_name}'s check-in PIN is {pin}. Tell them privately — "
+        "it won't be shown again.",
+        "success",
+    )
+
+
+@admin_bp.route("/employees/<int:employee_id>/reset-pin", methods=["POST"])
+def reset_employee_pin(employee_id: int):
+    employee = db.session.get(Employee, employee_id) or abort(404)
+    _issue_pin_and_flash(employee, "PIN reset.")
+    return redirect(url_for("admin.list_employees"))
+
+
+@admin_bp.route("/assignments/<int:assignment_id>/punch-link", methods=["POST"])
+def issue_punch_link(assignment_id: int):
+    """Create (if needed) and show the worker's keypad link for one shift."""
+    assignment = db.session.get(ShiftAssignment, assignment_id) or abort(404)
+    if assignment.status != AssignmentStatus.accepted:
+        flash("Punch links are only for confirmed workers.", "error")
+        return redirect(url_for("admin.shift_detail", shift_id=assignment.shift_id))
+    url = punch_url(current_app.config["PUBLIC_BASE_URL"], assignment)
+    db.session.commit()
+    flash(f"Check-in link for {assignment.employee.full_name}: {url}", "success")
+    return redirect(url_for("admin.shift_detail", shift_id=assignment.shift_id))
 
 
 @admin_bp.route("/employees/<int:employee_id>/deactivate", methods=["POST"])
@@ -644,7 +684,7 @@ def export_timesheets():
     writer.writerow([
         "Date", "Job", "Venue timezone", "Worker", "Phone",
         "Scheduled start", "Scheduled end", "Check in (local)",
-        "Check out (local)", "Hours worked", "Flags",
+        "Check out (local)", "Hours worked", "In via", "Out via", "Flags",
     ])
     now_utc = utcnow_naive()
     for a in rows:
@@ -675,6 +715,8 @@ def export_timesheets():
             check_in.strftime("%Y-%m-%d %H:%M %Z") if check_in else "",
             check_out.strftime("%Y-%m-%d %H:%M %Z") if check_out else "",
             "" if a.worked_hours is None else f"{a.worked_hours:.2f}",
+            a.check_in_source or "",
+            a.check_out_source or "",
             "; ".join(flags),
         )])
 

@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 from extensions import db
 from models import AssignmentStatus, Shift, ShiftAssignment, ShiftStatus
 from utils.sms import WhatsAppService
+from utils.web_punch import punch_url
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,8 @@ def send_shift_reminders(
             work_date=shift.date,
             start_time=shift.start_time,
             end_time=shift.end_time,
+            # Also issues the token for assignments accepted before PIN punch existed.
+            punch_url=punch_url(service.base_url, assignment),
         )
         if ok:
             assignment.reminder_sent_at = now

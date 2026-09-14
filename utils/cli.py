@@ -172,6 +172,37 @@ def check_staffing() -> None:
     )
 
 
+@admin_cli.command("issue-pins")
+@click.option("--all", "reissue_all", is_flag=True, help="Re-issue PINs for workers who already have one.")
+def issue_pins(reissue_all: bool) -> None:
+    """Issue check-in PINs to active workers (default: only those without one).
+
+    Prints name, phone, PIN as CSV to stdout exactly once — hand these out
+    privately; PINs are stored only as keyed hashes and can't be recovered.
+    """
+    from utils.pins import PinConfigError, set_new_pin
+
+    query = Employee.query.filter_by(is_active=True)
+    if not reissue_all:
+        query = query.filter(Employee.pin_hash.is_(None))
+    employees = query.order_by(Employee.last_name, Employee.first_name).all()
+    if not employees:
+        click.echo("No workers need a PIN.", err=True)
+        return
+
+    writer = csv.writer(click.get_text_stream("stdout"))
+    writer.writerow(["name", "phone_number", "pin"])
+    try:
+        rows = [(e.full_name, e.phone_number, set_new_pin(e)) for e in employees]
+        db.session.commit()
+    except PinConfigError as exc:
+        db.session.rollback()
+        raise click.ClickException(str(exc))
+    for row in rows:
+        writer.writerow(row)
+    click.echo(f"Issued {len(rows)} PIN(s).", err=True)
+
+
 def register_cli(app: Flask) -> None:
     """Attach the ``admin`` command group to the Flask app."""
     app.cli.add_command(admin_cli)

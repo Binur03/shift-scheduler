@@ -115,6 +115,14 @@
           </td>
           <td class="px-6 py-3.5">
             <div class="flex items-center justify-end gap-2">
+              <form method="post" action="{{ url_for('admin.reset_employee_pin', employee_id=e.id) }}"
+                    onsubmit="return confirm('Give {{ e.first_name }} a new check-in PIN? Their old PIN stops working.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="text-xs font-medium text-indigo-700 border border-indigo-200 rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 transition"
+                        title="{{ 'PIN set ' ~ e.pin_set_at_utc.strftime('%d %b %Y') if e.pin_set_at_utc else 'No PIN yet' }}">
+                  {{ 'Reset PIN' if e.pin_hash else 'Set PIN' }}
+                </button>
+              </form>
               {% if e.is_active %}
               <form method="post" action="{{ url_for('admin.deactivate_employee', employee_id=e.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
