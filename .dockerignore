@@ -22,8 +22,10 @@ Dockerfile
 .idea/
 .DS_Store
 
-# Tests & coverage
+# Tests, coverage & release tooling
 tests/
+deploy/
+requirements-dev.txt
 .pytest_cache/
 .coverage
 htmlcov/

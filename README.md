@@ -62,7 +62,45 @@ flask --app app db upgrade    # create/upgrade tables (Alembic migrations)
 python app.py                 # http://localhost:8080
 ```
 
-Run the tests with `python -m pytest tests/`.
+Run the tests with `pip install -r requirements-dev.txt && python -m pytest tests/`.
+
+The InnoDB concurrency suite (simultaneous Twilio webhooks hitting real
+`SELECT … FOR UPDATE` row locks) only runs against a disposable MySQL
+database whose name contains `test`:
+
+```bash
+TEST_MYSQL_URL="mysql+pymysql://user:pass@127.0.0.1:3306/shift_scheduler_test" \
+  python -m pytest tests/test_punch_concurrency_mysql.py -v
+```
+
+## SMS check-in / check-out
+
+Workers text **IN** when they arrive (from 60 min before a confirmed shift,
+`PUNCH_EARLY_MINUTES`) and **OUT** when they leave. Twilio POSTs each text to
+`/webhooks/twilio/sms`; the app verifies `X-Twilio-Signature` against
+`PUBLIC_BASE_URL`, locks the worker's row then the assignment row
+(`with_for_update()`), stores the punch in UTC, and replies via TwiML.
+Every inbound text — including malformed ones — is logged in `inbound_sms`,
+keyed by Twilio's MessageSid so webhook retries are never double-counted.
+Timesheets export from the Workers page in each venue's local time.
+
+## Vendor shift emails
+
+Vendors email shift requests; SendGrid Inbound Parse posts them to
+`/webhooks/email/<vendor token>` (Basic Auth + per-vendor token + DKIM for the
+vendor's domain). Each line like
+`09/20/2026 | 4:00 PM - 11:00 PM | Concessions Stand 12 | 6` becomes a
+**draft** shift that an admin approves on the **Inbox** page before dispatch.
+Unreadable lines are listed with the reason. See `utils/email_parser.py` for
+the accepted formats.
+
+## Releasing
+
+```bash
+deploy/release.sh                   # tests → SQL backup → build → no-traffic candidate (migrates) → smoke test → promote
+deploy/rollback.sh [REVISION]       # traffic-only rollback; migrations are additive
+deploy/configure_twilio_webhook.sh  # one-time: point the Twilio number at /webhooks/twilio/sms
+```
 
 ## Database migrations
 
