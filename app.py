@@ -66,12 +66,14 @@ def create_app(config_object: type | None = None) -> Flask:
     # Register blueprints.
     from routes.admin import admin_bp
     from routes.auth import auth_bp
+    from routes.public import public_bp
     from routes.tasks import tasks_bp
     from routes.webhooks import webhooks_bp
     from routes.worker import worker_bp
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(public_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(worker_bp)
@@ -93,10 +95,6 @@ def create_app(config_object: type | None = None) -> Flask:
     from utils.cli import register_cli
 
     register_cli(app)
-
-    @app.route("/")
-    def index():
-        return redirect(url_for("admin.list_shifts"))
 
     # Note: /healthz is reserved by Google's frontend on *.run.app domains
     # (it serves its own 404 for that path), so the probe lives at /health.

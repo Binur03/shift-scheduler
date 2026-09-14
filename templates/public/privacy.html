@@ -1,0 +1,73 @@
+{% extends "public/_layout.html" %}
+{% block title %}Privacy Policy — {{ b.name }}{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold text-slate-900">Privacy Policy</h1>
+{% if b.effective_date %}<p class="mt-2 text-slate-500">Effective {{ b.effective_date }}</p>{% endif %}
+
+<div class="mt-8 space-y-8 leading-relaxed">
+  <section>
+    <p>
+      This policy explains what information {{ b.name }} ("we") keeps about the workers who use our
+      shift-scheduling system, why, and who can see it.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Information we collect</h2>
+    <ul class="mt-2 list-disc pl-6 space-y-1">
+      <li>Your name and mobile phone number</li>
+      <li>The shifts you are offered, accept, or decline</li>
+      <li>The times you check in and out of shifts, and whether that was by text or by the check-in page</li>
+      <li>Text messages you send to our scheduling number (for example IN, OUT, STOP)</li>
+      <li>Your check-in PIN, stored only in an irreversibly scrambled (hashed) form</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">How we use it</h2>
+    <p class="mt-2">
+      Only to run our work schedule: offering shifts, sending shift reminders and check-in links,
+      recording attendance, and preparing payroll. We do not use it for advertising.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Sharing</h2>
+    <p class="mt-2 font-medium">
+      We do not sell, rent, or share mobile phone numbers or text-message opt-in information with third
+      parties or affiliates for marketing or promotional purposes.
+    </p>
+    <p class="mt-2">
+      We use service providers only to operate this system: Twilio to deliver text messages and Google Cloud
+      to host the application and database. They process information on our behalf and not for their own
+      marketing. We may disclose information if required by law.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Retention and security</h2>
+    <p class="mt-2">
+      We keep attendance and payroll records for as long as needed for payroll and legal record-keeping.
+      Access to the system is limited to authorized staff, connections are encrypted, and data is stored
+      in access-controlled cloud infrastructure.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Your choices</h2>
+    <p class="mt-2">
+      Reply STOP to any of our texts to stop receiving them. To ask what information we hold about you,
+      or to correct it, contact us below.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
+    <p class="mt-2">
+      {{ b.name }}{% if b.address %}, {{ b.address }}{% elif b.location %}, {{ b.location }}{% endif %}<br>
+      {% if b.email %}Email: <a href="mailto:{{ b.email }}" class="text-indigo-700 underline">{{ b.email }}</a><br>{% endif %}
+      {% if b.phone %}Phone: {{ b.phone }}{% endif %}
+    </p>
+  </section>
+</div>
+{% endblock %}

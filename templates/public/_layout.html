@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ b.name }}{% endblock %}</title>
+  <meta name="description" content="{{ b.name }} — shift scheduling and attendance for our cleaning crews." />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-white text-slate-800 antialiased min-h-screen flex flex-col">
+  <header class="border-b border-slate-200">
+    <div class="max-w-3xl mx-auto px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <a href="{{ url_for('public.home') }}" class="font-bold text-lg text-slate-900">{{ b.name }}</a>
+      <nav class="flex gap-5 text-sm text-slate-600">
+        <a href="{{ url_for('public.sms_terms') }}" class="hover:text-slate-900">SMS Terms</a>
+        <a href="{{ url_for('public.privacy') }}" class="hover:text-slate-900">Privacy Policy</a>
+      </nav>
+      <a href="{{ url_for('auth.login') }}" class="ml-auto text-sm text-slate-500 hover:text-slate-900">Staff sign-in</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl w-full mx-auto px-5 py-10 flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-slate-200">
+    <div class="max-w-3xl mx-auto px-5 py-6 text-sm text-slate-500 space-y-1">
+      <p class="font-medium text-slate-700">{{ b.name }}</p>
+      {% if b.address %}<p>{{ b.address }}</p>{% elif b.location %}<p>{{ b.location }}</p>{% endif %}
+      {% if b.email %}<p>Email: <a href="mailto:{{ b.email }}" class="underline">{{ b.email }}</a></p>{% endif %}
+      {% if b.phone %}<p>Phone: {{ b.phone }}</p>{% endif %}
+      <p class="pt-2">
+        <a href="{{ url_for('public.sms_terms') }}" class="underline">SMS Terms</a> ·
+        <a href="{{ url_for('public.privacy') }}" class="underline">Privacy Policy</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

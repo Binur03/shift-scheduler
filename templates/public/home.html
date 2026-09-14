@@ -1,0 +1,42 @@
+{% extends "public/_layout.html" %}
+{% block title %}{{ b.name }} — Shift Scheduling{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold text-slate-900">{{ b.name }}</h1>
+<p class="mt-3 text-lg text-slate-600">
+  We schedule and staff cleaning crews for arena events{% if b.location %} in {{ b.location }}{% endif %}.
+  This site is how our team receives shift offers and records attendance for payroll.
+</p>
+
+<section class="mt-10">
+  <h2 class="text-xl font-semibold text-slate-900">Text messages for our workers</h2>
+  <p class="mt-3">
+    {{ b.name }} sends text messages{% if b.sms_number %} from {{ b.sms_number }}{% endif %} only to our own
+    workers who have given us their mobile number and agreed to receive work-related texts.
+    The program is called <strong>{{ b.program }}</strong>. Messages are about work only:
+  </p>
+  <ul class="mt-3 list-disc pl-6 space-y-1">
+    <li>Offers of open shifts, with a private link to accept or decline</li>
+    <li>A reminder the day before a confirmed shift, with a check-in link</li>
+    <li>Confirmations when a worker texts <strong>IN</strong> or <strong>OUT</strong> to record arrival or departure</li>
+  </ul>
+  <p class="mt-4">
+    Message frequency varies with the work schedule. Message and data rates may apply.
+    Reply <strong>STOP</strong> to stop receiving texts or <strong>HELP</strong> for help.
+    We never send marketing or promotional messages.
+  </p>
+  <p class="mt-4">
+    Full details: <a href="{{ url_for('public.sms_terms') }}" class="text-indigo-700 underline">SMS Terms</a> and
+    <a href="{{ url_for('public.privacy') }}" class="text-indigo-700 underline">Privacy Policy</a>.
+  </p>
+</section>
+
+<section class="mt-10">
+  <h2 class="text-xl font-semibold text-slate-900">Contact</h2>
+  <p class="mt-3">
+    Questions about your schedule or our texts:
+    {%- if b.email %} <a href="mailto:{{ b.email }}" class="text-indigo-700 underline">{{ b.email }}</a>{% endif %}
+    {%- if b.email and b.phone %} or{% endif %}
+    {%- if b.phone %} {{ b.phone }}{% endif %}
+  </p>
+</section>
+{% endblock %}

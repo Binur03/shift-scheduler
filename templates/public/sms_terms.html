@@ -1,0 +1,62 @@
+{% extends "public/_layout.html" %}
+{% block title %}SMS Terms — {{ b.name }}{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold text-slate-900">SMS Terms</h1>
+<p class="mt-2 text-slate-500">{{ b.program }}{% if b.effective_date %} · Effective {{ b.effective_date }}{% endif %}</p>
+
+<div class="mt-8 space-y-8 leading-relaxed">
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">What this program is</h2>
+    <p class="mt-2">
+      {{ b.program }} is a work-notification text program run by {{ b.name }} for its own workers.
+      Texts{% if b.sms_number %} come from {{ b.sms_number }} and{% endif %} cover: offers of open shifts with a
+      link to accept or decline, a reminder before a confirmed shift with a check-in link, and confirmations
+      when you text IN or OUT to record your arrival and departure. We do not send marketing or promotional texts.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">How you opt in</h2>
+    <p class="mt-2">
+      When you join our crew, you give your supervisor your mobile number and agree to receive
+      work-related text messages from {{ b.name }}. We only text numbers that workers have provided
+      to us for this purpose. Agreeing to texts is not a condition of any purchase.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">How to opt out or get help</h2>
+    <ul class="mt-2 list-disc pl-6 space-y-1">
+      <li>Reply <strong>STOP</strong> to any message to stop receiving texts. You'll get one confirmation and no further texts.</li>
+      <li>Reply <strong>START</strong> to receive texts again.</li>
+      <li>Reply <strong>HELP</strong> for help, or contact us using the details below.</li>
+    </ul>
+    <p class="mt-2">If you opt out, you can still get your schedule directly from your supervisor.</p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Frequency and cost</h2>
+    <p class="mt-2">
+      Message frequency varies with the work schedule. Message and data rates may apply according to
+      your mobile plan. Carriers are not liable for delayed or undelivered messages.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Your information</h2>
+    <p class="mt-2">
+      Mobile numbers and text-message consent are never sold or shared with third parties for marketing.
+      See our <a href="{{ url_for('public.privacy') }}" class="text-indigo-700 underline">Privacy Policy</a>.
+    </p>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
+    <p class="mt-2">
+      {{ b.name }}{% if b.address %}, {{ b.address }}{% elif b.location %}, {{ b.location }}{% endif %}<br>
+      {% if b.email %}Email: <a href="mailto:{{ b.email }}" class="text-indigo-700 underline">{{ b.email }}</a><br>{% endif %}
+      {% if b.phone %}Phone: {{ b.phone }}{% endif %}
+    </p>
+  </section>
+</div>
+{% endblock %}
