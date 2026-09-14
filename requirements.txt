@@ -8,4 +8,5 @@ PyMySQL==1.1.1
 gunicorn==23.0.0
 twilio==9.3.7
 python-dotenv==1.0.1
+tzdata==2025.2
 sentry-sdk[flask]==2.20.0

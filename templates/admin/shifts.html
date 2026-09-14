@@ -297,7 +297,7 @@
       </thead>
       <tbody class="divide-y divide-slate-100">
         {% for s in upcoming %}
-        {% set urgent = (not s.is_full) and s.date <= soon and s.status != 'cancelled' %}
+        {% set urgent = (not s.is_full) and s.date <= soon and s.status not in ('cancelled', 'draft') %}
         <tr class="hover:bg-slate-50/70 transition {{ 'bg-rose-50/60 hover:bg-rose-50' if urgent else '' }}">
           <td class="px-6 py-3.5">
             <span class="font-medium text-slate-900">{{ s.job.title }}</span>
@@ -306,7 +306,12 @@
           <td class="px-4 py-3.5 text-slate-600 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
           <td class="px-4 py-3.5 text-slate-600 whitespace-nowrap">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
           <td class="px-4 py-3.5">
-            {% if s.is_full %}
+            {% if s.status == 'draft' %}
+              <a href="{{ url_for('admin.list_inbound') }}" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                Draft — approve in Inbox
+              </a>
+            {% elif s.is_full %}
               <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                 Filled {{ s.accepted_count }}/{{ s.required_headcount }}

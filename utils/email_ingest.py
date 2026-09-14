@@ -1,0 +1,162 @@
+"""Persist and parse an inbound vendor email into DRAFT shifts.
+
+Order of operations (each step committed so a failure later never loses
+earlier work):
+
+1. Dedupe on Message-ID. A redelivered email returns the stored record.
+2. Store the raw email (committed) — recoverable even if parsing crashes.
+3. Sender authentication: DKIM must pass for the vendor's domain and the
+   From address must be on that domain; otherwise mark REJECTED, no shifts.
+4. Parse lines, map positions to Jobs, create DRAFT shifts, record errors.
+
+Input is the SendGrid Inbound Parse form payload (``from``, ``subject``,
+``text``, ``html``, ``headers``, ``dkim``).
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import re
+from collections.abc import Mapping
+from datetime import date
+
+from sqlalchemy.exc import IntegrityError
+
+from extensions import db
+from models import (
+    InboundEmail,
+    Job,
+    ParseStatus,
+    Shift,
+    ShiftSource,
+    ShiftStatus,
+    Vendor,
+    utcnow_naive,
+)
+from utils.email_parser import html_to_text, parse_shift_email
+
+logger = logging.getLogger(__name__)
+
+_MESSAGE_ID_RE = re.compile(r"^message-id:\s*(<[^>\r\n]+>)", re.IGNORECASE | re.MULTILINE)
+_DKIM_PASS_RE = re.compile(r"@([A-Za-z0-9.-]+)\s*:\s*pass", re.IGNORECASE)
+_ADDRESS_RE = re.compile(r"[\w.+'-]+@([A-Za-z0-9.-]+)")
+
+
+def extract_message_id(fields: Mapping[str, str]) -> str:
+    """Message-ID header, or a stable content hash when a sender omits it."""
+    match = _MESSAGE_ID_RE.search(fields.get("headers", "") or "")
+    if match:
+        return match.group(1)[:255]
+    digest = hashlib.sha256(
+        "\x1f".join(
+            fields.get(k, "") or "" for k in ("from", "subject", "text", "html")
+        ).encode("utf-8", "replace")
+    ).hexdigest()
+    return f"<sha256-{digest}@no-message-id>"
+
+
+def _domain_matches(domain: str, allowed: str) -> bool:
+    domain, allowed = domain.lower().rstrip("."), allowed.lower().rstrip(".")
+    return domain == allowed or domain.endswith("." + allowed)
+
+
+def sender_authenticated(vendor: Vendor, fields: Mapping[str, str]) -> tuple[bool, str]:
+    """DKIM pass for the vendor domain AND a From address on that domain."""
+    passed = _DKIM_PASS_RE.findall(fields.get("dkim", "") or "")
+    if not any(_domain_matches(d, vendor.allowed_sender_domain) for d in passed):
+        return False, f"DKIM did not pass for {vendor.allowed_sender_domain}"
+    from_match = _ADDRESS_RE.search(fields.get("from", "") or "")
+    if not from_match or not _domain_matches(from_match.group(1), vendor.allowed_sender_domain):
+        return False, f"From address is not on {vendor.allowed_sender_domain}"
+    return True, ""
+
+
+def ingest_vendor_email(
+    vendor: Vendor, fields: Mapping[str, str], *, today: date | None = None
+) -> tuple[InboundEmail, bool]:
+    """Store + parse one email. Returns (record, created_now)."""
+    message_id = extract_message_id(fields)
+    existing = InboundEmail.query.filter_by(message_id=message_id).first()
+    if existing is not None:
+        return existing, False
+
+    body = fields.get("text") or html_to_text(fields.get("html", "") or "")
+    email = InboundEmail(
+        vendor_id=vendor.id,
+        message_id=message_id,
+        from_address=(fields.get("from", "") or "")[:320],
+        subject=(fields.get("subject", "") or "")[:998],
+        raw_body=body,
+        dkim_result=(fields.get("dkim", "") or "")[:512],
+        received_at_utc=utcnow_naive(),
+        parse_status=ParseStatus.FAILED,  # until parsing proves otherwise
+        errors=[],
+    )
+    db.session.add(email)
+    try:
+        db.session.commit()  # (2) raw email is durable before parsing
+    except IntegrityError:
+        # A concurrent delivery of the same message won the insert.
+        db.session.rollback()
+        return InboundEmail.query.filter_by(message_id=message_id).one(), False
+
+    ok, reason = sender_authenticated(vendor, fields)
+    if not ok:
+        email.parse_status = ParseStatus.REJECTED
+        email.errors = [{"line": 0, "text": "", "error": reason}]
+        db.session.commit()
+        logger.warning("Rejected inbound email %s for vendor %s: %s", email.id, vendor.id, reason)
+        return email, True
+
+    result = parse_shift_email(body, today=today or utcnow_naive().date())
+    errors = [e.as_dict() for e in result.errors]
+    jobs_by_title = {j.title.strip().lower(): j for j in Job.query.all()}
+
+    created = 0
+    for line in result.shifts:
+        job = jobs_by_title.get(line.position.lower())
+        if job is None:
+            errors.append({
+                "line": line.line_no, "text": line.text,
+                "error": f"no job named '{line.position}' — add it on the Jobs page",
+            })
+            continue
+        duplicate = Shift.query.filter_by(
+            job_id=job.id, date=line.work_date, start_time=line.start, end_time=line.end
+        ).first()
+        if duplicate is not None:
+            errors.append({
+                "line": line.line_no, "text": line.text,
+                "error": f"already scheduled (shift #{duplicate.id})",
+            })
+            continue
+        db.session.add(
+            Shift(
+                job_id=job.id,
+                date=line.work_date,
+                start_time=line.start,
+                end_time=line.end,
+                required_headcount=line.headcount,
+                status=ShiftStatus.DRAFT,
+                source=ShiftSource.EMAIL,
+                vendor_id=vendor.id,
+                inbound_email_id=email.id,
+            )
+        )
+        created += 1
+
+    email.shifts_created = created
+    email.errors = sorted(errors, key=lambda e: e["line"])
+    if created and not errors:
+        email.parse_status = ParseStatus.PARSED
+    elif created:
+        email.parse_status = ParseStatus.PARTIAL
+    else:
+        email.parse_status = ParseStatus.FAILED
+    db.session.commit()
+
+    logger.info(
+        "Inbound email %s (vendor %s): %s, %d draft shift(s), %d error(s)",
+        email.id, vendor.id, email.parse_status, created, len(errors),
+    )
+    return email, True

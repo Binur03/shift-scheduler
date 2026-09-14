@@ -63,8 +63,13 @@ class Config:
         }
     )
 
-    # Public base URL used when rendering acceptance links (SMS, etc.).
+    # Public base URL used when rendering acceptance links (SMS, etc.) and as
+    # the exact URL Twilio signs for inbound-SMS webhook verification.
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8080")
+
+    # Cap request bodies (inbound vendor emails with attachments are the
+    # largest legitimate payloads).
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 10 * 1024 * 1024))
 
     # Session cookie hardening (admin login).
     SESSION_COOKIE_HTTPONLY = True

@@ -7,6 +7,37 @@
   <p class="text-sm text-slate-500 mt-1">Everyone here receives shift invitations when you dispatch. Deactivate someone to pause their invites without losing their history.</p>
 </div>
 
+{# ---------- Timesheet export ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+      </span>
+      <div>
+        <h2 class="font-semibold text-slate-900">Export timesheet</h2>
+        <p class="text-xs text-slate-500">Hours from texted IN/OUT punches, in each venue's local time, with missing and late punches flagged.</p>
+      </div>
+    </div>
+    <form method="get" action="{{ url_for('admin.export_timesheets') }}" class="flex flex-wrap gap-3 items-end">
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">From</span>
+        <input name="start" type="date" required value="{{ timesheet_start }}"
+               class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">To</span>
+        <input name="end" type="date" required value="{{ timesheet_end }}"
+               class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
+      </label>
+      <button class="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/30 transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+        Download CSV
+      </button>
+    </form>
+  </div>
+</div>
+
 {# ---------- Add worker ---------- #}
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8">
   <div class="flex items-center gap-3 mb-4">

@@ -55,28 +55,39 @@ def create_app(config_object: type | None = None) -> Flask:
     with app.app_context():
         from models import (  # noqa: F401  (imported for side effects)
             Employee,
+            InboundEmail,
+            InboundSms,
             Job,
             Shift,
             ShiftAssignment,
+            Vendor,
         )
 
     # Register blueprints.
     from routes.admin import admin_bp
     from routes.auth import auth_bp
     from routes.tasks import tasks_bp
+    from routes.webhooks import webhooks_bp
     from routes.worker import worker_bp
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
+    app.register_blueprint(webhooks_bp)
     app.register_blueprint(worker_bp)
 
     # CSRF applies to the session-authenticated admin/login forms. Worker
-    # pages are authenticated by the unguessable URL token itself, and the
-    # cron endpoint by the X-Tasks-Auth header — both are exempt so links in
-    # week-old WhatsApp messages and Cloud Scheduler keep working.
+    # pages are authenticated by the unguessable URL token itself, the cron
+    # endpoint by the X-Tasks-Auth header, and webhooks by Twilio signatures /
+    # Basic Auth — all exempt, since none of them carry a browser session.
     csrf.exempt(worker_bp)
     csrf.exempt(tasks_bp)
+    csrf.exempt(webhooks_bp)
+
+    # {{ utc_dt | venue_clock(job.timezone) }} -> "8:02 AM" in venue time.
+    from utils.timeutil import format_local_clock
+
+    app.add_template_filter(format_local_clock, "venue_clock")
 
     # Register the `flask admin ...` CLI command group.
     from utils.cli import register_cli

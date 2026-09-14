@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Inbox{% endblock %}
+{% block content %}
+
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inbox</h1>
+  <p class="text-sm text-slate-500 mt-1">Shift requests emailed by vendors land here as drafts. Review each email, then approve its shifts so they can be sent to workers.</p>
+</div>
+
+{% set status_styles = {
+  'parsed':   ('bg-emerald-100 text-emerald-800', 'bg-emerald-500', 'All lines read'),
+  'partial':  ('bg-amber-100 text-amber-800',     'bg-amber-500',   'Some lines need attention'),
+  'failed':   ('bg-rose-100 text-rose-700',       'bg-rose-400',    'Nothing usable'),
+  'rejected': ('bg-slate-200 text-slate-700',     'bg-slate-500',   'Sender not verified'),
+} %}
+
+{# ---------- Emails ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+  <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <h2 class="font-semibold text-slate-900">Vendor emails</h2>
+    <span class="text-xs text-slate-400">{{ draft_count }} draft shift(s) waiting for approval</span>
+  </div>
+
+  {% for e in emails %}
+  {% set style = status_styles.get(e.parse_status, status_styles['failed']) %}
+  <details class="border-b border-slate-100 last:border-0 group" {{ 'open' if e.draft_shifts and loop.index <= 3 }}>
+    <summary class="px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-2 hover:bg-slate-50 transition">
+      <svg class="chev w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
+      <div class="min-w-0 flex-1">
+        <p class="font-medium text-slate-900 truncate">{{ e.subject or '(no subject)' }}</p>
+        <p class="text-xs text-slate-400 truncate">{{ e.vendor.name }} · {{ e.from_address }} · {{ e.received_at_utc.strftime('%d %b %Y %H:%M') }} UTC</p>
+      </div>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium {{ style[0] }}">
+        <span class="w-1.5 h-1.5 rounded-full {{ style[1] }}"></span> {{ style[2] }}
+      </span>
+      {% if e.draft_shifts %}
+        <span class="rounded-full px-2.5 py-1 text-xs font-semibold bg-indigo-100 text-indigo-700">{{ e.draft_shifts | length }} draft(s)</span>
+      {% endif %}
+    </summary>
+
+    <div class="px-6 pb-5 pl-14 space-y-4">
+      {% if e.shifts %}
+      <div class="rounded-lg border border-slate-200 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-500 text-left text-xs uppercase tracking-wider">
+            <tr><th class="px-4 py-2 font-semibold">Job</th><th class="px-4 py-2 font-semibold">Date</th><th class="px-4 py-2 font-semibold">Time</th><th class="px-4 py-2 font-semibold">Workers</th><th class="px-4 py-2 font-semibold">Status</th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for s in e.shifts | sort(attribute='date') %}
+            <tr>
+              <td class="px-4 py-2 font-medium text-slate-900">{{ s.job.title }}</td>
+              <td class="px-4 py-2 text-slate-600 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
+              <td class="px-4 py-2 text-slate-600 whitespace-nowrap">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
+              <td class="px-4 py-2 text-slate-600">{{ s.required_headcount }}</td>
+              <td class="px-4 py-2">
+                {% if s.status == 'draft' %}
+                  <span class="rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700">draft</span>
+                {% else %}
+                  <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="text-xs font-medium text-emerald-700 hover:underline">{{ s.status }}</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if e.errors %}
+      <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+        <p class="text-xs font-semibold text-amber-800 mb-2">Lines that weren't turned into shifts</p>
+        <ul class="space-y-1.5">
+          {% for err in e.errors %}
+          <li class="text-xs text-amber-900">
+            {% if err.line %}<span class="font-mono text-amber-600">L{{ err.line }}</span>{% endif %}
+            {% if err.text %}<code class="bg-white/70 rounded px-1 text-slate-700">{{ err.text }}</code> —{% endif %}
+            {{ err.error }}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if e.draft_shifts %}
+      <div class="flex flex-wrap gap-3">
+        <form method="post" action="{{ url_for('admin.approve_inbound', email_id=e.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/30 transition">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+            Approve {{ e.draft_shifts | length }} shift(s)
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('admin.discard_inbound', email_id=e.id) }}"
+              onsubmit="return confirm('Discard the draft shifts from this email?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="border border-rose-200 text-rose-600 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-50 transition">Discard drafts</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <details class="text-xs">
+        <summary class="text-slate-400 hover:text-slate-600">Show original email</summary>
+        <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 border border-slate-200 p-3 text-slate-600">{{ e.raw_body }}</pre>
+      </details>
+    </div>
+  </details>
+  {% else %}
+  <div class="px-6 py-12 text-center">
+    <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" /></svg>
+    <p class="text-sm font-medium text-slate-500">No vendor emails yet</p>
+    <p class="text-xs text-slate-400 mt-1">Add a vendor below and point its emails at the webhook URL.</p>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid lg:grid-cols-2 gap-6">
+  {# ---------- Vendors ---------- #}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <h2 class="font-semibold text-slate-900 mb-1">Vendors</h2>
+    <p class="text-xs text-slate-500 mb-4">Emails are only accepted from a vendor's own domain (DKIM verified).</p>
+    <form method="post" action="{{ url_for('admin.create_vendor') }}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end mb-5">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Name</span>
+        <input name="name" required placeholder="Levy Restaurants"
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <label class="block">
+        <span class="text-xs font-medium text-slate-600">Email domain</span>
+        <input name="allowed_sender_domain" required placeholder="levyrestaurants.com"
+               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+      </label>
+      <button class="bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">Add vendor</button>
+    </form>
+    <ul class="divide-y divide-slate-100">
+      {% for v in vendors %}
+      <li class="py-3 {{ 'opacity-60' if not v.is_active }}">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-slate-900">{{ v.name }} <span class="font-normal text-slate-400">@{{ v.allowed_sender_domain }}</span></p>
+          </div>
+          <form method="post" action="{{ url_for('admin.toggle_vendor', vendor_id=v.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="text-xs font-medium {{ 'text-amber-700 border-amber-200 hover:bg-amber-50' if v.is_active else 'text-emerald-700 border-emerald-200 hover:bg-emerald-50' }} border rounded-lg px-2.5 py-1.5 transition">
+              {{ 'Disable' if v.is_active else 'Enable' }}
+            </button>
+          </form>
+        </div>
+        <div class="mt-2 flex items-center gap-2">
+          <code class="flex-1 min-w-0 truncate text-xs bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-500">{{ webhook_base }}{{ v.inbound_token }}</code>
+          <button type="button" class="text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1 hover:bg-slate-50 transition"
+                  onclick="navigator.clipboard.writeText('{{ webhook_base }}{{ v.inbound_token }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })">Copy</button>
+        </div>
+      </li>
+      {% else %}
+      <li class="py-3 text-sm text-slate-400">No vendors yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {# ---------- Setup notes ---------- #}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 space-y-4">
+    <h2 class="font-semibold text-slate-900">Connecting the pipes</h2>
+    <div>
+      <p class="font-medium text-slate-800">Vendor emails (SendGrid Inbound Parse)</p>
+      <p class="text-xs mt-1">Set the destination to the vendor's webhook URL with Basic Auth credentials embedded: <code class="bg-slate-50 px-1 rounded">https://USER:PASS@host/webhooks/email/…</code>.</p>
+      <p class="text-xs mt-2 text-slate-500">One shift per line, e.g. <code class="bg-slate-50 px-1 rounded">09/20/2026 | 4:00 PM - 11:00 PM | Concessions Stand 12 | 6</code>. The position must match a job title.</p>
+    </div>
+    <div>
+      <p class="font-medium text-slate-800">SMS check-in / out (Twilio)</p>
+      <p class="text-xs mt-1">Set the number's incoming-message webhook (HTTP POST) to:</p>
+      <code class="block mt-1 text-xs bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-500 break-all">{{ sms_webhook_url }}</code>
+      <p class="text-xs mt-2 text-slate-500">Workers text <b>IN</b> on arrival (up to 60 min early) and <b>OUT</b> when leaving.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

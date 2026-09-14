@@ -19,7 +19,7 @@
     </div>
   </div>
   <form method="post" action="{{ url_for('admin.create_job') }}"
-        class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <label class="block">
       <span class="text-xs font-medium text-slate-600">Job title</span>
@@ -35,6 +35,15 @@
       <span class="text-xs font-medium text-slate-600">Default crew size</span>
       <input name="default_headcount" type="number" min="1" value="1"
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+    </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">Venue timezone</span>
+      <select name="timezone"
+              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
+        {% for tz in venue_timezones %}
+        <option value="{{ tz }}" {{ 'selected' if tz == default_timezone }}>{{ tz.split('/')[-1].replace('_', ' ') }}</option>
+        {% endfor %}
+      </select>
     </label>
     <button class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -70,6 +79,18 @@
           <span class="text-xs font-medium text-slate-600">Default crew</span>
           <input name="default_headcount" type="number" min="1" value="{{ j.default_headcount }}"
                  class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+        </label>
+        <label class="block flex-1">
+          <span class="text-xs font-medium text-slate-600">Timezone</span>
+          <select name="timezone"
+                  class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
+            {% for tz in venue_timezones %}
+            <option value="{{ tz }}" {{ 'selected' if tz == j.timezone }}>{{ tz.split('/')[-1].replace('_', ' ') }}</option>
+            {% endfor %}
+            {% if j.timezone not in venue_timezones %}
+            <option value="{{ j.timezone }}" selected>{{ j.timezone }}</option>
+            {% endif %}
+          </select>
         </label>
         <button class="inline-flex items-center gap-1.5 border border-slate-300 text-slate-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-slate-50 transition">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>

@@ -1,15 +1,18 @@
-"""Admin blueprint: CRUD for employees, jobs, and shifts plus token dispatch.
+"""Admin blueprint: CRUD for employees, jobs, and shifts, token dispatch,
+vendor-email review, and timesheet export.
 
-These routes are intended to sit behind authentication (not implemented in
-this scaffold). Add an auth guard via a before_request hook before exposing
-them publicly.
+Every route is gated by the ``require_admin`` before_request hook below.
 """
+import csv
+import io
 import secrets
 from datetime import date, datetime, timedelta
 
 from flask import (
     Blueprint,
+    Response,
     abort,
+    current_app,
     flash,
     redirect,
     render_template,
@@ -17,19 +20,39 @@ from flask import (
     session,
     url_for,
 )
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import (
+    DEFAULT_VENUE_TIMEZONE,
     AssignmentStatus,
     Employee,
+    InboundEmail,
     Job,
     Shift,
     ShiftAssignment,
     ShiftStatus,
+    Vendor,
+    utcnow_naive,
 )
 from utils.cli import normalize_e164
 from utils.sms import ShiftBroadcastDetails, WhatsAppService
+from utils.timeutil import is_valid_timezone, shift_window_utc, utc_naive_to_local
+
+# Venue timezones offered in the Jobs form (any valid IANA name is accepted).
+VENUE_TIMEZONES = [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+]
+
+# A check-in this long after scheduled start is flagged "late" on timesheets.
+LATE_GRACE = timedelta(minutes=10)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -50,7 +73,13 @@ def require_admin():
 @admin_bp.route("/employees")
 def list_employees():
     employees = Employee.query.order_by(Employee.last_name, Employee.first_name).all()
-    return render_template("admin/employees.html", employees=employees)
+    today = date.today()
+    return render_template(
+        "admin/employees.html",
+        employees=employees,
+        timesheet_start=today - timedelta(days=today.weekday() + 7),
+        timesheet_end=today - timedelta(days=today.weekday() + 1),
+    )
 
 
 @admin_bp.route("/employees", methods=["POST"])
@@ -142,15 +171,24 @@ def delete_employee(employee_id: int):
 @admin_bp.route("/jobs")
 def list_jobs():
     jobs = Job.query.order_by(Job.title).all()
-    return render_template("admin/jobs.html", jobs=jobs)
+    return render_template(
+        "admin/jobs.html",
+        jobs=jobs,
+        venue_timezones=VENUE_TIMEZONES,
+        default_timezone=DEFAULT_VENUE_TIMEZONE,
+    )
 
 
 @admin_bp.route("/jobs", methods=["POST"])
 def create_job():
+    tz_name = _form_timezone(DEFAULT_VENUE_TIMEZONE)
+    if tz_name is None:
+        return redirect(url_for("admin.list_jobs"))
     job = Job(
         title=request.form["title"].strip(),
         location_address=request.form["location_address"].strip(),
         default_headcount=int(request.form.get("default_headcount", 1)),
+        timezone=tz_name,
     )
     db.session.add(job)
     db.session.commit()
@@ -158,12 +196,25 @@ def create_job():
     return redirect(url_for("admin.list_jobs"))
 
 
+def _form_timezone(fallback: str) -> str | None:
+    """Validated IANA timezone from the form; flashes and returns None if bad."""
+    tz_name = (request.form.get("timezone") or fallback).strip()
+    if not is_valid_timezone(tz_name):
+        flash(f"'{tz_name}' isn't a valid timezone (e.g. America/Denver).", "error")
+        return None
+    return tz_name
+
+
 @admin_bp.route("/jobs/<int:job_id>/update", methods=["POST"])
 def update_job(job_id: int):
     job = db.session.get(Job, job_id) or abort(404)
+    tz_name = _form_timezone(job.timezone)
+    if tz_name is None:
+        return redirect(url_for("admin.list_jobs"))
     job.title = request.form["title"].strip()
     job.location_address = request.form["location_address"].strip()
     job.default_headcount = int(request.form.get("default_headcount", job.default_headcount))
+    job.timezone = tz_name
     db.session.commit()
     flash("Job updated.", "success")
     return redirect(url_for("admin.list_jobs"))
@@ -342,6 +393,9 @@ def _dispatch_one_shift(shift: Shift, service: WhatsAppService) -> tuple[int, in
 def dispatch_shift(shift_id: int):
     """Dispatch a single shift's invitations to all active employees."""
     shift = db.session.get(Shift, shift_id) or abort(404)
+    if shift.status == ShiftStatus.DRAFT:
+        flash("This shift is still a draft from a vendor email — approve it on the Inbox page first.", "error")
+        return redirect(url_for("admin.shift_detail", shift_id=shift.id))
     created, sent, failed = _dispatch_one_shift(shift, WhatsAppService())
     flash(
         f"Dispatched {created} new invitation(s); sent {sent}, failed {failed}.",
@@ -385,7 +439,11 @@ def copy_week():
     week_end = week_start + timedelta(days=6)
 
     source = (
-        Shift.query.filter(Shift.date >= week_start, Shift.date <= week_end)
+        Shift.query.filter(
+            Shift.date >= week_start,
+            Shift.date <= week_end,
+            Shift.status.in_([ShiftStatus.OPEN, ShiftStatus.FILLED]),
+        )
         .order_by(Shift.date, Shift.start_time)
         .all()
     )
@@ -468,3 +526,161 @@ def dispatch_week():
         "success",
     )
     return redirect(url_for("admin.list_shifts"))
+
+
+# --------------------------------------------------------------------------- #
+# Inbox: vendors + parsed vendor emails awaiting approval
+# --------------------------------------------------------------------------- #
+@admin_bp.route("/inbound")
+def list_inbound():
+    emails = (
+        InboundEmail.query.order_by(InboundEmail.received_at_utc.desc()).limit(50).all()
+    )
+    vendors = Vendor.query.order_by(Vendor.name).all()
+    base = current_app.config["PUBLIC_BASE_URL"].rstrip("/")
+    return render_template(
+        "admin/inbound.html",
+        emails=emails,
+        vendors=vendors,
+        webhook_base=f"{base}/webhooks/email/",
+        sms_webhook_url=f"{base}/webhooks/twilio/sms",
+        draft_count=Shift.query.filter_by(status=ShiftStatus.DRAFT).count(),
+    )
+
+
+@admin_bp.route("/vendors", methods=["POST"])
+def create_vendor():
+    name = request.form.get("name", "").strip()
+    domain = request.form.get("allowed_sender_domain", "").strip().lower().lstrip("@")
+    if not name or "." not in domain or " " in domain:
+        flash("Vendor needs a name and an email domain like levyrestaurants.com.", "error")
+        return redirect(url_for("admin.list_inbound"))
+    db.session.add(
+        Vendor(name=name, allowed_sender_domain=domain, inbound_token=secrets.token_urlsafe(32))
+    )
+    db.session.commit()
+    flash(f"Vendor {name} added. Point SendGrid at its webhook URL below.", "success")
+    return redirect(url_for("admin.list_inbound"))
+
+
+@admin_bp.route("/vendors/<int:vendor_id>/toggle", methods=["POST"])
+def toggle_vendor(vendor_id: int):
+    vendor = db.session.get(Vendor, vendor_id) or abort(404)
+    vendor.is_active = not vendor.is_active
+    db.session.commit()
+    flash(f"{vendor.name} {'enabled' if vendor.is_active else 'disabled'}.", "success")
+    return redirect(url_for("admin.list_inbound"))
+
+
+@admin_bp.route("/inbound/<int:email_id>/approve", methods=["POST"])
+def approve_inbound(email_id: int):
+    """Publish an email's draft shifts so they can be dispatched."""
+    email = db.session.get(InboundEmail, email_id) or abort(404)
+    drafts = email.draft_shifts
+    for shift in drafts:
+        shift.status = ShiftStatus.OPEN
+    db.session.commit()
+    flash(
+        f"Approved {len(drafts)} shift(s) from {email.vendor.name}. "
+        "They'll go out with the next dispatch.",
+        "success",
+    )
+    return redirect(url_for("admin.list_inbound"))
+
+
+@admin_bp.route("/inbound/<int:email_id>/discard", methods=["POST"])
+def discard_inbound(email_id: int):
+    email = db.session.get(InboundEmail, email_id) or abort(404)
+    drafts = email.draft_shifts
+    for shift in drafts:
+        db.session.delete(shift)
+    db.session.commit()
+    flash(f"Discarded {len(drafts)} draft shift(s).", "success")
+    return redirect(url_for("admin.list_inbound"))
+
+
+# --------------------------------------------------------------------------- #
+# Timesheets (SMS punches, exported in venue-local time)
+# --------------------------------------------------------------------------- #
+def _csv_safe(value) -> str:
+    """Neutralize spreadsheet formula injection in exported cells."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "@", "\t", "\r") or (
+        text[:1] in ("+", "-") and not text[1:].replace(".", "").isdigit()
+    ):
+        return "'" + text
+    return text
+
+
+@admin_bp.route("/timesheets.csv")
+def export_timesheets():
+    try:
+        start = datetime.strptime(request.args["start"], "%Y-%m-%d").date()
+        end = datetime.strptime(request.args["end"], "%Y-%m-%d").date()
+    except (KeyError, ValueError):
+        flash("Pick a valid start and end date for the timesheet.", "error")
+        return redirect(url_for("admin.list_employees"))
+    if end < start or (end - start).days > 93:
+        flash("Timesheet range must be 1–93 days, start before end.", "error")
+        return redirect(url_for("admin.list_employees"))
+
+    rows = (
+        db.session.query(ShiftAssignment)
+        .join(Shift, Shift.id == ShiftAssignment.shift_id)
+        .filter(
+            Shift.date >= start,
+            Shift.date <= end,
+            or_(
+                ShiftAssignment.status == AssignmentStatus.accepted,
+                ShiftAssignment.check_in_at_utc.is_not(None),
+            ),
+        )
+        .order_by(Shift.date, Shift.start_time)
+        .all()
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Date", "Job", "Venue timezone", "Worker", "Phone",
+        "Scheduled start", "Scheduled end", "Check in (local)",
+        "Check out (local)", "Hours worked", "Flags",
+    ])
+    now_utc = utcnow_naive()
+    for a in rows:
+        shift, job = a.shift, a.shift.job
+        tz_name = job.timezone
+        start_utc, end_utc = shift_window_utc(shift.date, shift.start_time, shift.end_time, tz_name)
+        check_in = utc_naive_to_local(a.check_in_at_utc, tz_name)
+        check_out = utc_naive_to_local(a.check_out_at_utc, tz_name)
+
+        flags = []
+        if a.check_in_at_utc is None and now_utc > end_utc:
+            flags.append("missing IN")
+        if a.check_in_at_utc is not None and a.check_out_at_utc is None and now_utc > end_utc:
+            flags.append("missing OUT")
+        if a.check_in_at_utc is not None and a.check_in_at_utc > start_utc + LATE_GRACE:
+            flags.append("late IN")
+        if a.status != AssignmentStatus.accepted:
+            flags.append(f"assignment {a.status.value}")
+
+        writer.writerow([_csv_safe(v) for v in (
+            shift.date.isoformat(),
+            job.title,
+            tz_name,
+            a.employee.full_name,
+            a.employee.phone_number,
+            shift.start_time.strftime("%H:%M"),
+            shift.end_time.strftime("%H:%M"),
+            check_in.strftime("%Y-%m-%d %H:%M %Z") if check_in else "",
+            check_out.strftime("%Y-%m-%d %H:%M %Z") if check_out else "",
+            "" if a.worked_hours is None else f"{a.worked_hours:.2f}",
+            "; ".join(flags),
+        )])
+
+    filename = f"timesheet_{start.isoformat()}_{end.isoformat()}.csv"
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -8,6 +8,13 @@
   All shifts
 </a>
 
+{% if shift.status == 'draft' %}
+<div class="flex items-start gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 mb-4">
+  <svg class="w-5 h-5 mt-0.5 shrink-0 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+  <span>This is a <b>draft</b> from {{ shift.vendor.name if shift.vendor else 'a vendor' }}'s email. It can't be sent to workers until it's approved on the <a href="{{ url_for('admin.list_inbound') }}" class="font-semibold underline">Inbox</a> page.</span>
+</div>
+{% endif %}
+
 {# ---------- Header card ---------- #}
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
   <div class="flex flex-wrap items-start justify-between gap-6">
@@ -89,6 +96,7 @@
           <th class="px-6 py-3 font-semibold">Worker</th>
           <th class="px-4 py-3 font-semibold">Phone</th>
           <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-4 py-3 font-semibold">Time punches <span class="normal-case font-normal">({{ shift.job.timezone.split('/')[-1].replace('_', ' ') }})</span></th>
           <th class="px-4 py-3 font-semibold">Private link</th>
           <th class="px-6 py-3"></th>
         </tr>
@@ -124,6 +132,19 @@
               </span>
             {% endif %}
           </td>
+          <td class="px-4 py-3.5 text-xs whitespace-nowrap">
+            {% if a.check_in_at_utc %}
+              <span class="text-emerald-700 font-medium">IN {{ a.check_in_at_utc | venue_clock(shift.job.timezone) }}</span>
+              {% if a.check_out_at_utc %}
+                · <span class="text-slate-700 font-medium">OUT {{ a.check_out_at_utc | venue_clock(shift.job.timezone) }}</span>
+                <span class="text-slate-400">({{ a.worked_hours }} h)</span>
+              {% else %}
+                · <span class="text-amber-600">on shift</span>
+              {% endif %}
+            {% elif a.status.value == 'accepted' %}
+              <span class="text-slate-400">not checked in</span>
+            {% endif %}
+          </td>
           <td class="px-4 py-3.5">
             <button type="button"
                     onclick="navigator.clipboard.writeText('{{ (config.PUBLIC_BASE_URL or request.url_root.rstrip('/')) }}/accept/{{ a.token }}').then(() => { this.querySelector('span').textContent = 'Copied!'; setTimeout(() => this.querySelector('span').textContent = 'Copy link', 1500); })"
@@ -144,7 +165,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="px-6 py-12 text-center">
+          <td colspan="6" class="px-6 py-12 text-center">
             <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>
             <p class="text-sm font-medium text-slate-500">No invitations sent yet</p>
             <p class="text-xs text-slate-400 mt-1">Use the button above to invite all active workers.</p>
