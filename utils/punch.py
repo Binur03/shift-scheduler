@@ -186,13 +186,12 @@ def _punch_in(employee: Employee, message_sid: str, now_utc: datetime) -> PunchO
         shift = assignment.shift
         opens_at, _start, end_utc = check_in_window_utc(assignment)
         if opens_at <= now_utc <= end_utc:
-            assignment.check_in_at_utc = now_utc
+            record_check_in(assignment, now_utc, PunchSource.SMS)
             assignment.check_in_message_sid = message_sid
-            assignment.check_in_source = PunchSource.SMS
             return PunchOutcome(
                 PunchResult.CHECKED_IN,
                 f"Checked in for {shift.job.title} at "
-                f"{format_local_clock(now_utc, shift.job.timezone)}. "
+                f"{format_local_clock(assignment.check_in_at_utc, shift.job.timezone)}. "
                 "Text OUT when you leave.",
                 assignment.id,
             )
@@ -209,13 +208,15 @@ def _punch_out(employee: Employee, message_sid: str, now_utc: datetime) -> Punch
     open_punch = _open_punch(employee.id)
     if open_punch is not None:
         shift = open_punch.shift
-        open_punch.check_out_at_utc = now_utc
+        # A snapped check-in can sit a few minutes after the real tap; never
+        # let check-out land before it.
+        open_punch.check_out_at_utc = max(now_utc, open_punch.check_in_at_utc)
         open_punch.check_out_message_sid = message_sid
         open_punch.check_out_source = PunchSource.SMS
         return PunchOutcome(
             PunchResult.CHECKED_OUT,
             f"Checked out of {shift.job.title} at "
-            f"{format_local_clock(now_utc, shift.job.timezone)} "
+            f"{format_local_clock(open_punch.check_out_at_utc, shift.job.timezone)} "
             f"({open_punch.worked_hours:g} hrs). Thanks!",
             open_punch.id,
         )
@@ -260,6 +261,39 @@ def check_in_window_utc(assignment: ShiftAssignment) -> tuple[datetime, datetime
         shift.date, shift.start_time, shift.end_time, shift.job.timezone
     )
     return start_utc - _early_window(), start_utc, end_utc
+
+
+def check_in_grace() -> timedelta:
+    """Early check-ins up to this long before start are paid from the start."""
+    return timedelta(minutes=int(os.environ.get("CHECK_IN_GRACE_MINUTES", 5)))
+
+
+def payroll_check_in_time(actual_utc: datetime, scheduled_start_utc: datetime) -> datetime:
+    """Snap-to-start: a check-in within the grace period *before* the scheduled
+    start is recorded as the start itself, so arriving a few minutes early
+    never creates overtime on the timesheet. On time, late, or earlier than
+    the grace period: the exact time is kept.
+
+        start 3:00 PM, grace 5 min
+        2:54:59 PM -> 2:54:59 PM   (outside grace: exact)
+        2:55:00 PM -> 3:00:00 PM   (snapped)
+        2:59:59 PM -> 3:00:00 PM   (snapped)
+        3:00:00 PM -> 3:00:00 PM   (on time: exact)
+        3:07:00 PM -> 3:07:00 PM   (late: exact)
+    """
+    if scheduled_start_utc - check_in_grace() <= actual_utc < scheduled_start_utc:
+        return scheduled_start_utc
+    return actual_utc
+
+
+def record_check_in(assignment: ShiftAssignment, actual_utc: datetime, source: str) -> None:
+    """Stamp a check-in (caller holds the row lock). The payroll time goes in
+    ``check_in_at_utc``; the real moment of the punch is kept in
+    ``check_in_actual_at_utc`` for disputes."""
+    _opens, start_utc, _end = check_in_window_utc(assignment)
+    assignment.check_in_actual_at_utc = actual_utc
+    assignment.check_in_at_utc = payroll_check_in_time(actual_utc, start_utc)
+    assignment.check_in_source = source
 
 
 def open_punch_for(employee_id: int) -> ShiftAssignment | None:

@@ -3,8 +3,58 @@
 {% block content %}
 
 <div class="mb-6">
-  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Inbox</h1>
-  <p class="text-sm text-slate-500 mt-1">Shift requests emailed by vendors land here as drafts. Review each email, then approve its shifts so they can be sent to workers.</p>
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">{{ t("Inbox") }}</h1>
+  <p class="text-sm text-slate-500 mt-1">{{ t("Turn a vendor's schedule into shifts: paste it below (or have it emailed in), fix anything that needs it, then approve.") }}</p>
+</div>
+
+{# ---------- Paste a schedule ---------- #}
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8">
+  <div class="flex items-center gap-3 mb-4">
+    <span class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg>
+    </span>
+    <div>
+      <h2 class="font-semibold text-slate-900">{{ t("Paste a schedule") }}</h2>
+      <p class="text-sm text-slate-500">
+        {{ t("Copy the schedule out of the email and paste it here. Each line like") }}
+        <code class="bg-slate-50 px-1 rounded">9/5 20 @ 3pm parking</code>
+        {{ t("becomes a draft shift. End times and areas are only added when the line has them.") }}
+      </p>
+    </div>
+  </div>
+  {% if not jobs %}
+  <p class="text-sm text-slate-500">
+    {{ t("You need a job before you can import a schedule.") }}
+    <a href="{{ url_for('admin.list_jobs') }}" class="text-indigo-600 underline">{{ t("Go to the Jobs page") }}</a>
+  </p>
+  {% else %}
+  <form method="post" action="{{ url_for('admin.paste_schedule') }}" class="grid gap-3 md:grid-cols-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <label class="block md:col-span-4">
+      <span class="text-xs font-medium text-slate-600">{{ t("Schedule text") }}</span>
+      <textarea name="schedule_text" rows="8" required placeholder="9/2 20 @ 1pm&#10;9/3 2 @ 6am parking&#10;9/5 4 @ 6am parking&#10;20 @ 3pm"
+                class="mt-1 w-full font-mono border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500"></textarea>
+    </label>
+    <label class="block md:col-span-2">
+      <span class="text-xs font-medium text-slate-600">{{ t("Job these shifts are for") }}</span>
+      <select name="job_id" required
+              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
+        {% if jobs | length > 1 %}<option value="" disabled selected>{{ t("Select a job…") }}</option>{% endif %}
+        {% for j in jobs %}<option value="{{ j.id }}">{{ j.title }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">{{ t("Email sent on") }} <span class="font-normal text-slate-400">{{ t("(sets the year)") }}</span></span>
+      <input name="sent_on" type="date" value="{{ today }}"
+             class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
+    </label>
+    <div class="flex items-end">
+      <button class="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
+        {{ t("Read shifts") }}
+      </button>
+    </div>
+  </form>
+  {% endif %}
 </div>
 
 {% set status_styles = {
@@ -17,18 +67,19 @@
 {# ---------- Emails ---------- #}
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
   <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-    <h2 class="font-semibold text-slate-900">Vendor emails</h2>
+    <h2 class="font-semibold text-slate-900">{{ t("Schedules received") }}</h2>
     <span class="text-xs text-slate-400">{{ draft_count }} draft shift(s) waiting for approval</span>
   </div>
 
   {% for e in emails %}
   {% set style = status_styles.get(e.parse_status, status_styles['failed']) %}
-  <details class="border-b border-slate-100 last:border-0 group" {{ 'open' if e.draft_shifts and loop.index <= 3 }}>
+  <details id="schedule-{{ e.id }}" class="border-b border-slate-100 last:border-0 group"
+           {{ 'open' if (open_id == e.id) or (not open_id and e.draft_shifts and loop.index <= 3) }}>
     <summary class="px-6 py-4 flex flex-wrap items-center gap-x-4 gap-y-2 hover:bg-slate-50 transition">
       <svg class="chev w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" /></svg>
       <div class="min-w-0 flex-1">
         <p class="font-medium text-slate-900 truncate">{{ e.subject or '(no subject)' }}</p>
-        <p class="text-xs text-slate-400 truncate">{{ e.vendor.name }} · {{ e.from_address }} · {{ e.received_at_utc.strftime('%d %b %Y %H:%M') }} UTC</p>
+        <p class="text-xs text-slate-400 truncate">{{ e.sender_label }}{% if e.from_address %} · {{ e.from_address }}{% endif %} · {{ e.received_at_utc.strftime('%d %b %Y %H:%M') }} UTC</p>
       </div>
       <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium {{ style[0] }}">
         <span class="w-1.5 h-1.5 rounded-full {{ style[1] }}"></span> {{ style[2] }}
@@ -43,32 +94,52 @@
       <div class="rounded-lg border border-slate-200 overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-500 text-left text-xs uppercase tracking-wider">
-            <tr><th class="px-4 py-2 font-semibold">Job</th><th class="px-4 py-2 font-semibold">Date</th><th class="px-4 py-2 font-semibold">Time</th><th class="px-4 py-2 font-semibold">Workers</th><th class="px-4 py-2 font-semibold">Status</th></tr>
+            <tr>
+              <th class="px-3 py-2 font-semibold">{{ t("Date") }}</th><th class="px-3 py-2 font-semibold">{{ t("People") }}</th>
+              <th class="px-3 py-2 font-semibold">{{ t("Start") }}</th><th class="px-3 py-2 font-semibold">{{ t("End (optional)") }}</th>
+              <th class="px-3 py-2 font-semibold">{{ t("Area (optional)") }}</th>
+              <th class="px-3 py-2 font-semibold">{{ t("Status") }}</th>
+            </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            {% for s in e.shifts | sort(attribute='date') %}
-            <tr>
-              <td class="px-4 py-2 font-medium text-slate-900">{{ s.job.title }}</td>
-              <td class="px-4 py-2 text-slate-600 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
-              <td class="px-4 py-2 text-slate-600 whitespace-nowrap">{{ s.start_time.strftime('%H:%M') }}–{{ s.end_time.strftime('%H:%M') }}</td>
-              <td class="px-4 py-2 text-slate-600">{{ s.required_headcount }}</td>
-              <td class="px-4 py-2">
-                {% if s.status == 'draft' %}
-                  <span class="rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700">draft</span>
-                {% else %}
-                  <a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="text-xs font-medium text-emerald-700 hover:underline">{{ s.status }}</a>
-                {% endif %}
+            {% for s in e.shifts | sort(attribute='start_time') | sort(attribute='date') %}
+            {% if s.status == 'draft' %}
+            {% set f = 'draft-' ~ s.id %}
+            <tr class="bg-indigo-50/30">
+              <td class="px-3 py-1.5"><input form="{{ f }}" name="date" type="date" value="{{ s.date }}" required class="border border-slate-300 rounded-md px-2 py-1 text-sm w-36"></td>
+              <td class="px-3 py-1.5"><input form="{{ f }}" name="required_headcount" type="number" min="1" max="500" value="{{ s.required_headcount }}" required class="border border-slate-300 rounded-md px-2 py-1 text-sm w-16"></td>
+              <td class="px-3 py-1.5"><input form="{{ f }}" name="start_time" type="time" value="{{ s.start_time.strftime('%H:%M') }}" required class="border border-slate-300 rounded-md px-2 py-1 text-sm"></td>
+              <td class="px-3 py-1.5"><input form="{{ f }}" name="end_time" type="time" value="{{ s.end_time.strftime('%H:%M') if s.end_time else '' }}" class="border border-slate-300 rounded-md px-2 py-1 text-sm" aria-label="{{ t('End time (leave blank if until done)') }}"></td>
+              <td class="px-3 py-1.5"><input form="{{ f }}" name="area" type="text" value="{{ s.area or '' }}" maxlength="80" class="border border-slate-300 rounded-md px-2 py-1 text-sm w-28"></td>
+              <td class="px-3 py-1.5 whitespace-nowrap">
+                <button form="{{ f }}" class="text-xs font-semibold text-indigo-700 border border-indigo-200 rounded-md px-2.5 py-1 hover:bg-indigo-50" aria-label="Save shift on {{ s.date }} at {{ s.start_time }}">{{ t("Save") }}</button>
+                <span class="ml-1 rounded-full px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700">{{ t("draft") }}</span>
               </td>
             </tr>
+            {% else %}
+            <tr>
+              <td class="px-3 py-2 text-slate-600 whitespace-nowrap">{{ s.date.strftime('%a %d %b') }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ s.required_headcount }}</td>
+              <td class="px-3 py-2 text-slate-600 whitespace-nowrap" colspan="2">{{ s.time_label }}</td>
+              <td class="px-3 py-2 text-slate-600">{{ s.area or '' }}</td>
+              <td class="px-3 py-2"><a href="{{ url_for('admin.shift_detail', shift_id=s.id) }}" class="text-xs font-medium text-emerald-700 hover:underline">{{ s.status }}</a></td>
+            </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
         </table>
+        <p class="px-3 py-2 text-xs text-slate-600 border-t border-slate-100">Save each edited row before approving. Job: {{ (e.shifts | first).job.title }} · Leave End blank when the shift runs until the job is done.</p>
       </div>
+      {% for s in e.shifts if s.status == 'draft' %}
+      <form id="draft-{{ s.id }}" method="post" action="{{ url_for('admin.edit_draft_shift', shift_id=s.id) }}" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      </form>
+      {% endfor %}
       {% endif %}
 
       {% if e.errors %}
       <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
-        <p class="text-xs font-semibold text-amber-800 mb-2">Lines that weren't turned into shifts</p>
+        <p class="text-xs font-semibold text-amber-800 mb-2">{{ t("Lines that weren't turned into shifts") }}</p>
         <ul class="space-y-1.5">
           {% for err in e.errors %}
           <li class="text-xs text-amber-900">
@@ -93,13 +164,13 @@
         <form method="post" action="{{ url_for('admin.discard_inbound', email_id=e.id) }}"
               onsubmit="return confirm('Discard the draft shifts from this email?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button class="border border-rose-200 text-rose-600 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-50 transition">Discard drafts</button>
+          <button class="border border-rose-200 text-rose-600 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-50 transition">{{ t("Discard drafts") }}</button>
         </form>
       </div>
       {% endif %}
 
       <details class="text-xs">
-        <summary class="text-slate-400 hover:text-slate-600">Show original email</summary>
+        <summary class="text-slate-400 hover:text-slate-600">{{ t("Show original email") }}</summary>
         <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 border border-slate-200 p-3 text-slate-600">{{ e.raw_body }}</pre>
       </details>
     </div>
@@ -107,30 +178,33 @@
   {% else %}
   <div class="px-6 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" /></svg>
-    <p class="text-sm font-medium text-slate-500">No vendor emails yet</p>
-    <p class="text-xs text-slate-400 mt-1">Add a vendor below and point its emails at the webhook URL.</p>
+    <p class="text-sm font-medium text-slate-500">{{ t("No schedules imported yet") }}</p>
+    <p class="text-xs text-slate-400 mt-1">{{ t("Paste the date, number of people and start time above. Review the drafts before sending invitations.") }}</p>
   </div>
   {% endfor %}
 </div>
 
+<details class="rounded-xl border border-slate-200 bg-white p-5">
+<summary class="font-semibold text-slate-600">{{ t("Automatic email setup & messaging connections") }}</summary>
+<p class="text-sm text-slate-500 mt-2 mb-5">{{ t("For initial setup only. To add a schedule today, use the paste box above.") }}</p>
 <div class="grid lg:grid-cols-2 gap-6">
   {# ---------- Vendors ---------- #}
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-    <h2 class="font-semibold text-slate-900 mb-1">Vendors</h2>
-    <p class="text-xs text-slate-500 mb-4">Emails are only accepted from a vendor's own domain (DKIM verified).</p>
+    <h2 class="font-semibold text-slate-900 mb-1">{{ t("Vendors") }}</h2>
+    <p class="text-xs text-slate-500 mb-4">{{ t("Emails are only accepted from a vendor's own domain (DKIM verified).") }}</p>
     <form method="post" action="{{ url_for('admin.create_vendor') }}" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end mb-5">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Name</span>
-        <input name="name" required placeholder="Levy Restaurants"
+        <span class="text-xs font-medium text-slate-600">{{ t("Name") }}</span>
+        <input name="name" required placeholder="{{ t('Levy Restaurants') }}"
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Email domain</span>
-        <input name="allowed_sender_domain" required placeholder="levyrestaurants.com"
+        <span class="text-xs font-medium text-slate-600">{{ t("Email domain") }}</span>
+        <input name="allowed_sender_domain" required placeholder="{{ t('levyrestaurants.com') }}"
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
-      <button class="bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">Add vendor</button>
+      <button class="bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">{{ t("Add vendor") }}</button>
     </form>
     <ul class="divide-y divide-slate-100">
       {% for v in vendors %}
@@ -149,29 +223,36 @@
         <div class="mt-2 flex items-center gap-2">
           <code class="flex-1 min-w-0 truncate text-xs bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-500">{{ webhook_base }}{{ v.inbound_token }}</code>
           <button type="button" class="text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1 hover:bg-slate-50 transition"
-                  onclick="navigator.clipboard.writeText('{{ webhook_base }}{{ v.inbound_token }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })">Copy</button>
+                  onclick="navigator.clipboard.writeText('{{ webhook_base }}{{ v.inbound_token }}').then(() => { this.textContent = 'Copied!'; setTimeout(() => this.textContent = 'Copy', 1500); })">{{ t("Copy") }}</button>
         </div>
       </li>
       {% else %}
-      <li class="py-3 text-sm text-slate-400">No vendors yet.</li>
+      <li class="py-3 text-sm text-slate-400">{{ t("No vendors yet.") }}</li>
       {% endfor %}
     </ul>
   </div>
 
   {# ---------- Setup notes ---------- #}
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-sm text-slate-600 space-y-4">
-    <h2 class="font-semibold text-slate-900">Connecting the pipes</h2>
+    <h2 class="font-semibold text-slate-900">{{ t("Connecting the pipes") }}</h2>
     <div>
-      <p class="font-medium text-slate-800">Vendor emails (SendGrid Inbound Parse)</p>
-      <p class="text-xs mt-1">Set the destination to the vendor's webhook URL with Basic Auth credentials embedded: <code class="bg-slate-50 px-1 rounded">https://USER:PASS@host/webhooks/email/…</code>.</p>
-      <p class="text-xs mt-2 text-slate-500">One shift per line, e.g. <code class="bg-slate-50 px-1 rounded">09/20/2026 | 4:00 PM - 11:00 PM | Concessions Stand 12 | 6</code>. The position must match a job title.</p>
+      <p class="font-medium text-slate-800">{{ t("Vendor emails (SendGrid Inbound Parse)") }}</p>
+      <p class="text-xs mt-1">{{ t("Set the destination to the vendor's webhook URL with Basic Auth credentials embedded:") }} <code class="bg-slate-50 px-1 rounded">https://USER:PASS@host/webhooks/email/…</code>.</p>
+      <p class="text-xs mt-2 text-slate-500">
+        {{ t("One shift per line, for example:") }}
+        <code class="bg-slate-50 px-1 rounded">09/20/2026 | 4:00 PM - 11:00 PM | Concessions Stand 12 | 6</code>
+        {{ t("The position must match a job title.") }}
+      </p>
     </div>
     <div>
-      <p class="font-medium text-slate-800">SMS check-in / out (Twilio)</p>
-      <p class="text-xs mt-1">Set the number's incoming-message webhook (HTTP POST) to:</p>
+      <p class="font-medium text-slate-800">{{ t("SMS check-in / out (Twilio)") }}</p>
+      <p class="text-xs mt-1">{{ t("Set the number's incoming-message webhook (HTTP POST) to:") }}</p>
       <code class="block mt-1 text-xs bg-slate-50 border border-slate-200 rounded px-2 py-1 text-slate-500 break-all">{{ sms_webhook_url }}</code>
-      <p class="text-xs mt-2 text-slate-500">Workers text <b>IN</b> on arrival (up to 60 min early) and <b>OUT</b> when leaving.</p>
+      <p class="text-xs mt-2 text-slate-500">
+        {{ t("Workers text IN on arrival (up to 60 min early) and OUT when leaving.") }}
+      </p>
     </div>
   </div>
 </div>
+</details>
 {% endblock %}

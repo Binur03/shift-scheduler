@@ -9,7 +9,7 @@ row* using MySQL InnoDB row-level locking:
 1. ``SELECT ... FROM shifts WHERE id = :id FOR UPDATE`` takes an exclusive lock
    on the single shift row. Every concurrent acceptor must acquire this same
    lock first, so they proceed strictly one at a time.
-2. While holding the lock we count assignments already in ``accepted`` state.
+2. While holding the lock we use a current locking read of accepted assignments.
 3. Only if ``accepted_count < required_headcount`` do we flip this assignment
    to ``accepted`` (and the shift to ``filled`` if this was the last seat),
    then commit — releasing the lock. Otherwise we roll back and return HTTP 409
@@ -18,22 +18,33 @@ row* using MySQL InnoDB row-level locking:
 Note on transactions: SQLAlchemy 2.0 removed the ``subtransactions=True`` flag.
 The session is already in an implicit transaction, so we manage an explicit
 boundary with ``commit()`` / ``rollback()`` and a guarding ``try/except`` that
-logs and rolls back on any unexpected error.
+rolls back on errors and retries transient InnoDB deadlocks.
 """
 from __future__ import annotations
 
 import logging
 
-from flask import Blueprint, Response, abort, jsonify, make_response, render_template, request
-from sqlalchemy import func
+from flask import Blueprint, Response, abort, jsonify, make_response, redirect, render_template, request, url_for
 
 from extensions import db, limiter
 from models import AssignmentStatus, Shift, ShiftAssignment, ShiftStatus, utcnow_naive
+from utils.assignments import lock_assignment_shift, locked_accepted_count
+from utils.i18n import use_worker_language
+from utils.punch import run_with_deadlock_retry
 from utils.web_punch import ensure_punch_token, shift_summary, web_punch
 
 logger = logging.getLogger(__name__)
 
 worker_bp = Blueprint("worker", __name__)
+
+
+@worker_bp.after_request
+def private_worker_response(response):
+    # Acceptance and punch links both grant access to a worker's shift.
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 def _load_assignment(token: str) -> ShiftAssignment:
@@ -46,6 +57,8 @@ def _load_assignment(token: str) -> ShiftAssignment:
     if assignment is None:
         logger.info("Unknown acceptance token requested: %s", token)
         abort(404)
+    # A worker's own links open in their language unless this browser chose one.
+    use_worker_language(assignment.employee)
     return assignment
 
 
@@ -60,6 +73,8 @@ def view_offer(token: str) -> Response | str:
     assignment = _load_assignment(token)
     shift = assignment.shift
 
+    if shift.status not in (ShiftStatus.OPEN, ShiftStatus.FILLED) or not assignment.employee.is_active:
+        return render_template("worker/closed.html", assignment=assignment, shift=shift)
     if assignment.status == AssignmentStatus.accepted:
         return render_template(
             "worker/confirmed.html", assignment=assignment, shift=shift
@@ -81,115 +96,92 @@ def accept_offer(token: str) -> Response | str | tuple[str, int]:
     Returns the confirmation view on success, or the "Shift Full" view with an
     HTTP 409 status if no seats remain.
     """
-    assignment = _load_assignment(token)
+    initial = _load_assignment(token)
+    assignment_id, shift_id = initial.id, initial.shift_id
 
-    # Idempotency / terminal-state short circuits (no locking required).
-    if assignment.status == AssignmentStatus.accepted:
-        return render_template(
-            "worker/confirmed.html", assignment=assignment, shift=assignment.shift
-        )
-    if assignment.status in (AssignmentStatus.cancelled, AssignmentStatus.rejected):
-        return render_template(
-            "worker/closed.html", assignment=assignment, shift=assignment.shift
-        )
-
-    try:
-        # (1) Acquire an exclusive InnoDB row lock on the shift. Concurrent
-        # acceptors block here until the current transaction commits/rolls back.
-        shift = (
-            db.session.query(Shift)
-            .filter(Shift.id == assignment.shift_id)
-            .with_for_update()
-            .first()
-        )
-        if shift is None:
+    def attempt():
+        assignment, shift = lock_assignment_shift(assignment_id, shift_id)
+        if shift.status not in (ShiftStatus.OPEN, ShiftStatus.FILLED) or not assignment.employee.is_active:
             db.session.rollback()
-            abort(404)
-
-        # (2) Count seats already taken, evaluated under the lock.
-        current_accepted_count = (
-            db.session.query(func.count(ShiftAssignment.id))
-            .filter(
-                ShiftAssignment.shift_id == shift.id,
-                ShiftAssignment.status == AssignmentStatus.accepted,
-            )
-            .scalar()
-        ) or 0
-
-        # (3a) No capacity: leave this assignment pending, undo any pending
-        # changes, and report a conflict.
-        if current_accepted_count >= shift.required_headcount:
+            return render_template("worker/closed.html", assignment=assignment, shift=shift)
+        if assignment.status == AssignmentStatus.accepted:
             db.session.rollback()
-            logger.info(
-                "Shift %s full (%d/%d); rejecting acceptance for assignment %s.",
-                shift.id,
-                current_accepted_count,
-                shift.required_headcount,
-                assignment.id,
-            )
-            # Ensure the shift is flagged filled for future GETs.
-            if shift.status != ShiftStatus.FILLED:
-                shift.status = ShiftStatus.FILLED
-                db.session.commit()
+            return render_template("worker/confirmed.html", assignment=assignment, shift=shift)
+        if assignment.status != AssignmentStatus.pending:
+            db.session.rollback()
+            return render_template("worker/closed.html", assignment=assignment, shift=shift)
+
+        # A normal COUNT can read the snapshot from the initial token lookup
+        # under MySQL REPEATABLE READ. Locking reads see committed seats NOW.
+        count = locked_accepted_count(shift.id)
+        if count >= shift.required_headcount:
+            shift.status = ShiftStatus.FILLED
+            db.session.commit()
             return render_template("worker/full.html", shift=shift), 409
 
-        # (3b) Capacity available: accept this worker.
         assignment.status = AssignmentStatus.accepted
-        ensure_punch_token(assignment)  # secret link for the PIN check-in keypad
-        if current_accepted_count + 1 >= shift.required_headcount:
+        ensure_punch_token(assignment)
+        if count + 1 >= shift.required_headcount:
             shift.status = ShiftStatus.FILLED
-
         db.session.commit()
-        logger.info(
-            "Assignment %s accepted for shift %s (%d/%d).",
-            assignment.id,
-            shift.id,
-            current_accepted_count + 1,
-            shift.required_headcount,
-        )
-        return render_template(
-            "worker/confirmed.html", assignment=assignment, shift=shift
-        )
+        logger.info("Assignment %s accepted for shift %s.", assignment_id, shift_id)
+        return render_template("worker/confirmed.html", assignment=assignment, shift=shift)
 
-    except Exception:  # noqa: BLE001 - log, release locks, surface a 500
+    try:
+        return run_with_deadlock_retry(attempt, label=f"accept assignment={assignment_id}")
+    except Exception:
         db.session.rollback()
-        logger.exception(
-            "Unexpected error accepting token=%s (assignment=%s).",
-            token,
-            getattr(assignment, "id", "?"),
-        )
+        raise
+
+
+@worker_bp.route("/accept/<token>/check-in", methods=["POST"])
+def open_check_in(token: str):
+    """Open the PIN screen from a confirmed invitation, including older offers.
+
+    Creates only the private link if missing; timestamps still require a PIN.
+    """
+    initial = _load_assignment(token)
+    assignment_id, shift_id = initial.id, initial.shift_id
+
+    def attempt():
+        assignment, shift = lock_assignment_shift(assignment_id, shift_id)
+        if (assignment.status != AssignmentStatus.accepted
+                or shift.status not in (ShiftStatus.OPEN, ShiftStatus.FILLED)
+                or not assignment.employee.is_active):
+            db.session.rollback()
+            return render_template("worker/closed.html", assignment=assignment, shift=shift), 409
+        punch_token = ensure_punch_token(assignment)
+        db.session.commit()
+        return redirect(url_for("worker.punch_page", token=punch_token))
+
+    try:
+        return run_with_deadlock_retry(attempt, label=f"open check-in assignment={assignment_id}")
+    except Exception:
+        db.session.rollback()
         raise
 
 
 @worker_bp.route("/decline/<token>", methods=["POST"])
 def decline_offer(token: str) -> Response | str:
-    """Mark the worker as not available for this shift.
+    """Decline a pending offer, serialized with acceptance and cancellation."""
+    initial = _load_assignment(token)
+    assignment_id, shift_id = initial.id, initial.shift_id
 
-    Only a *pending* assignment can be declined. Accepted assignments must go
-    through the coordinator (freeing a seat has scheduling consequences), and
-    already-closed assignments simply re-render their terminal view.
-    """
-    assignment = _load_assignment(token)
+    def attempt():
+        assignment, shift = lock_assignment_shift(assignment_id, shift_id)
+        if assignment.status == AssignmentStatus.accepted:
+            db.session.rollback()
+            return render_template("worker/confirmed.html", assignment=assignment, shift=shift)
+        if assignment.status == AssignmentStatus.pending:
+            assignment.status = AssignmentStatus.rejected
+        db.session.commit()
+        return render_template("worker/declined.html", assignment=assignment, shift=shift)
 
-    if assignment.status == AssignmentStatus.accepted:
-        return render_template(
-            "worker/confirmed.html", assignment=assignment, shift=assignment.shift
-        )
-    if assignment.status in (AssignmentStatus.cancelled, AssignmentStatus.rejected):
-        return render_template(
-            "worker/declined.html", assignment=assignment, shift=assignment.shift
-        )
-
-    assignment.status = AssignmentStatus.rejected
-    db.session.commit()
-    logger.info(
-        "Assignment %s declined (worker not available) for shift %s.",
-        assignment.id,
-        assignment.shift_id,
-    )
-    return render_template(
-        "worker/declined.html", assignment=assignment, shift=assignment.shift
-    )
+    try:
+        return run_with_deadlock_retry(attempt, label=f"decline assignment={assignment_id}")
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 # --------------------------------------------------------------------------- #
@@ -212,6 +204,7 @@ def punch_page(token: str):
     )
     if assignment is None:
         return _private(make_response(render_template("errors/404.html"), 404))
+    use_worker_language(assignment.employee)
     summary = shift_summary(assignment, utcnow_naive())
     return _private(make_response(render_template("worker/punch.html", token=token, s=summary)))
 

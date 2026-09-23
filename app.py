@@ -66,6 +66,7 @@ def create_app(config_object: type | None = None) -> Flask:
     # Register blueprints.
     from routes.admin import admin_bp
     from routes.auth import auth_bp
+    from routes.i18n import i18n_bp
     from routes.public import public_bp
     from routes.tasks import tasks_bp
     from routes.webhooks import webhooks_bp
@@ -73,6 +74,7 @@ def create_app(config_object: type | None = None) -> Flask:
 
     app.register_blueprint(admin_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(i18n_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(webhooks_bp)
@@ -85,6 +87,11 @@ def create_app(config_object: type | None = None) -> Flask:
     csrf.exempt(worker_bp)
     csrf.exempt(tasks_bp)
     csrf.exempt(webhooks_bp)
+
+    # English/Spanish: resolves the request language and exposes t() to Jinja.
+    from utils.i18n import register_i18n
+
+    register_i18n(app)
 
     # {{ utc_dt | venue_clock(job.timezone) }} -> "8:02 AM" in venue time.
     from utils.timeutil import format_local_clock

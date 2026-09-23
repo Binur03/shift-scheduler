@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_language() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,6 +17,10 @@
 <body class="min-h-screen antialiased bg-slate-100 flex items-center justify-center px-4 py-10
              bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.12),_transparent_60%)]">
   <div class="max-w-md w-full">
+    <div class="flex justify-center mb-4">
+      {% include "_language_toggle.html" %}
+    </div>
+
     <div class="flex items-center justify-center gap-2 mb-5">
       <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md shadow-indigo-600/30 flex items-center justify-center">
         <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -30,8 +34,8 @@
       {% block card %}{% endblock %}
     </div>
 
-    <p class="text-center text-xs text-slate-400 mt-5">
-      Questions? Contact your coordinator.
+    <p class="text-center text-sm text-slate-500 mt-5">
+      {{ t("Questions? Contact your coordinator.") }}
     </p>
   </div>
 </body>

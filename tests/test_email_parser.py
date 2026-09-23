@@ -74,7 +74,7 @@ class TestMalformedLines:
         ("09/20/2026 | 4 - 11 | Stand 12 | 6", "ambiguous"),
         ("09/20/2026 | 4:00 PM - 4:00 PM | Stand 12 | 6", "same"),
         ("02/30/2026 | 4pm - 11pm | Stand 12 | 6", "not a real calendar date"),
-        ("09/20/2020 | 4pm - 11pm | Stand 12 | 6", "past"),
+        ("09/20/2020 | 4pm - 11pm | Stand 12 | 6", "already passed"),
         ("09/20/2028 | 4pm - 11pm | Stand 12 | 6", "more than a year"),
         ("09/20/2026 | 4pm - 11pm | Stand 12 | 0", "headcount"),
         ("09/20/2026 | 4pm - 11pm | Stand 12 | 999", "headcount"),

@@ -6,6 +6,7 @@ through here so the rules live in one place.
 """
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -45,17 +46,27 @@ def utc_naive_to_local(utc_dt: datetime | None, tz_name: str | None) -> datetime
     return utc_dt.replace(tzinfo=timezone.utc).astimezone(venue_zone(tz_name))
 
 
+def open_shift_max_hours() -> float:
+    """How long a shift with no scheduled end ("until the job is done") is
+    treated as running, for check-in windows and missing-punch flags."""
+    return float(os.environ.get("OPEN_SHIFT_MAX_HOURS", 16))
+
+
 def shift_window_utc(
-    shift_date: date, start: time, end: time, tz_name: str | None
+    shift_date: date, start: time, end: time | None, tz_name: str | None
 ) -> tuple[datetime, datetime]:
     """Scheduled [start, end) of a shift as naive UTC.
 
     Overnight shifts (end <= start, e.g. 22:00-06:00) end on the next day.
+    Shifts with no end time run for OPEN_SHIFT_MAX_HOURS after start.
     """
     start_local = datetime.combine(shift_date, start)
-    end_local = datetime.combine(shift_date, end)
-    if end_local <= start_local:
-        end_local += timedelta(days=1)
+    if end is None:
+        end_local = start_local + timedelta(hours=open_shift_max_hours())
+    else:
+        end_local = datetime.combine(shift_date, end)
+        if end_local <= start_local:
+            end_local += timedelta(days=1)
     return (
         local_to_utc_naive(start_local, tz_name),
         local_to_utc_naive(end_local, tz_name),

@@ -1,26 +1,26 @@
 {% extends "worker/_layout.html" %}
-{% block title %}Response recorded · Shift Scheduler{% endblock %}
+{% block title %}{{ t("Response recorded") }} · Shift Scheduler{% endblock %}
 {% block card %}
 <div class="h-1.5 bg-gradient-to-r from-slate-300 to-slate-400"></div>
 <div class="p-7 text-center">
   <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
     <svg class="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
   </div>
-  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">Thanks, {{ assignment.employee.first_name }}</h1>
+  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">{{ t("Thanks, {name}", name=assignment.employee.first_name) }}</h1>
   <p class="text-sm text-slate-500 mb-6">
-    You're marked as <span class="font-semibold text-slate-700">not available</span> for this shift.
+    {{ t("You're marked as not available for this shift.") }}
   </p>
 
   <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-5 text-left space-y-1.5">
     <p class="font-semibold text-slate-700">{{ shift.job.title }}</p>
     <p class="text-sm text-slate-500">
-      {{ shift.date.strftime('%A, %d %B') }} ·
-      {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}
+      {{ format_date_medium(shift.date) }} ·
+      {{ shift.time_label }}{% if shift.area %} · {{ shift.area }}{% endif %}
     </p>
   </div>
 
   <p class="text-xs text-slate-400 mt-5">
-    If your availability changes, contact your coordinator.
+    {{ t("If your availability changes, contact your coordinator.") }}
   </p>
 </div>
 {% endblock %}

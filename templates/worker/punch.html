@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_language() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
   <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#020617" />
-  <title>{{ 'Check out' if s.state == 'ready_out' else 'Check in' }}</title>
+  <title>{{ t('Check out') if s.state == 'ready_out' else t('Check in') }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html, body { height: 100%; }
@@ -25,18 +25,24 @@
 
 <main class="min-h-full flex flex-col items-center px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
 
+  <div class="w-full max-w-sm flex justify-end mb-3">
+    {% set lang_variant = "dark" %}{% include "_language_toggle.html" %}
+  </div>
+
   {# ---------- Header: the one thing to do ---------- #}
   <header class="w-full max-w-sm text-center">
     {% if s.state == 'ready_out' %}
-      <h1 class="text-5xl font-black tracking-tight text-amber-400">CHECK OUT</h1>
-      <p class="mt-2 text-xl font-semibold text-slate-300">In at {{ s.check_in }}</p>
+      <h1 class="text-5xl font-black tracking-tight text-amber-400">{{ t("CHECK OUT") }}</h1>
+      <p class="mt-2 text-xl font-semibold text-slate-300">{{ t("In at {time}", time=s.check_in) }}</p>
     {% elif s.state == 'ready_in' %}
-      <h1 class="text-5xl font-black tracking-tight text-emerald-400">CHECK IN</h1>
+      <h1 class="text-5xl font-black tracking-tight text-emerald-400">{{ t("CHECK IN") }}</h1>
     {% endif %}
     <p class="mt-2 text-lg leading-snug text-slate-400">{{ s.job }}<br><span class="whitespace-nowrap">{{ s.shift_time }}</span></p>
   </header>
 
   {% if ready %}
+  <p class="mt-4 max-w-sm text-center text-base text-slate-300">{{ t("Enter your 4-digit PIN to check out. It submits automatically.") if s.state == 'ready_out' else t("Enter your 4-digit PIN to check in. It submits automatically.") }}</p>
+  <details class="mt-2 max-w-sm text-center text-base text-slate-300"><summary class="cursor-pointer py-3 min-h-[44px]">{{ t("Need help with your PIN?") }}</summary><p class="pb-2 text-slate-300">{{ t("Your PIN is usually the last 4 digits of your phone number. If that does not work, ask your supervisor to reset it. Do not share this link.") }}</p></details>
   {# ---------- PIN dots ---------- #}
   <section class="w-full max-w-sm mt-8 flex flex-col items-center">
     <div id="dots" class="flex gap-5" aria-hidden="true">
@@ -57,7 +63,7 @@
     <span></span>
     <button type="button" data-digit="0"
             class="key h-20 rounded-2xl bg-slate-800 text-4xl font-bold active:bg-slate-500 active:scale-95 transition disabled:opacity-40">0</button>
-    <button type="button" id="backspace" aria-label="Delete"
+    <button type="button" id="backspace" aria-label="{{ t('Delete') }}"
             class="key h-20 rounded-2xl text-slate-300 flex items-center justify-center active:bg-slate-800 active:scale-95 transition disabled:opacity-40">
       <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75 14.25 12m0 0 2.25 2.25M14.25 12l2.25-2.25M14.25 12 12 14.25m-2.58 4.92-6.374-6.375a1.125 1.125 0 0 1 0-1.59L9.42 4.83c.21-.211.497-.33.795-.33H19.5a2.25 2.25 0 0 1 2.25 2.25v10.5a2.25 2.25 0 0 1-2.25 2.25h-9.284c-.298 0-.585-.119-.795-.33Z" /></svg>
     </button>
@@ -71,23 +77,23 @@
       <div class="w-32 h-32 rounded-full bg-green-600 flex items-center justify-center">
         <svg class="w-20 h-20" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
       </div>
-      <h1 class="mt-6 text-5xl font-black">DONE</h1>
-      <p class="mt-4 text-3xl font-bold text-slate-200">IN {{ s.check_in }}</p>
-      <p class="mt-1 text-3xl font-bold text-slate-200">OUT {{ s.check_out }}</p>
+      <h1 class="mt-6 text-5xl font-black">{{ t("DONE") }}</h1>
+      <p class="mt-4 text-3xl font-bold text-slate-200">{{ t("IN") }} {{ s.check_in }}</p>
+      <p class="mt-1 text-3xl font-bold text-slate-200">{{ t("OUT") }} {{ s.check_out }}</p>
     {% elif s.state == 'too_early' %}
-      <h1 class="text-5xl font-black text-slate-200">TOO EARLY</h1>
-      <p class="mt-4 text-3xl font-bold text-emerald-400">Opens {{ s.opens_at }}</p>
+      <h1 class="text-5xl font-black text-slate-200">{{ t("TOO EARLY") }}</h1>
+      <p class="mt-4 text-3xl font-bold text-emerald-400">{{ t("Opens {when}", when=s.opens_at) }}</p>
       <button type="button" onclick="location.reload()"
-              class="mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">REFRESH</button>
+              class="mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">{{ t("REFRESH") }}</button>
     {% elif s.state == 'locked' %}
-      <h1 class="text-5xl font-black text-red-500">LOCKED</h1>
-      <p class="mt-4 text-2xl font-bold text-slate-300">Try again in 15 min<br>or see your supervisor</p>
+      <h1 class="text-5xl font-black text-red-500">{{ t("LOCKED") }}</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-300">{{ t("Try again in 15 min or see your supervisor") }}</p>
     {% elif s.state == 'ended' %}
-      <h1 class="text-5xl font-black text-slate-300">SHIFT OVER</h1>
-      <p class="mt-4 text-2xl font-bold text-slate-400">See your supervisor</p>
+      <h1 class="text-5xl font-black text-slate-300">{{ t("SHIFT OVER") }}</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-400">{{ t("See your supervisor") }}</p>
     {% else %}
-      <h1 class="text-5xl font-black text-slate-300">NOT AVAILABLE</h1>
-      <p class="mt-4 text-2xl font-bold text-slate-400">See your supervisor</p>
+      <h1 class="text-5xl font-black text-slate-300">{{ t("NOT AVAILABLE") }}</h1>
+      <p class="mt-4 text-2xl font-bold text-slate-400">{{ t("See your supervisor") }}</p>
     {% endif %}
   </section>
   {% endif %}
@@ -98,21 +104,50 @@
   <div class="pop w-40 h-40 rounded-full bg-white/20 flex items-center justify-center">
     <svg class="w-28 h-28" fill="none" viewBox="0 0 24 24" stroke-width="3.2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
   </div>
-  <p id="success-verb" class="mt-8 text-7xl font-black tracking-tight">IN</p>
+  <p id="success-verb" class="mt-8 text-7xl font-black tracking-tight">{{ t("IN") }}</p>
   <p id="success-time" class="mt-3 text-5xl font-extrabold"></p>
   <p id="success-note" class="mt-6 text-2xl font-bold text-green-100"></p>
+  <button id="success-next" type="button" onclick="location.reload()" class="mt-8 min-h-14 rounded-xl bg-white px-6 py-4 text-lg font-bold text-green-800">{{ t("View shift") }}</button>
 </div>
 
 <div id="stop" class="fixed inset-0 bg-slate-950 hidden flex-col items-center justify-center text-center px-6" role="alert">
   <p id="stop-title" class="text-5xl font-black text-red-500"></p>
   <p id="stop-detail" class="mt-4 text-2xl font-bold text-slate-300"></p>
   <button type="button" id="stop-retry" onclick="location.reload()"
-          class="hidden mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">TRY AGAIN</button>
+          class="hidden mt-10 h-20 w-64 rounded-2xl bg-slate-800 text-3xl font-bold active:bg-slate-600">{{ t("TRY AGAIN") }}</button>
 </div>
 
 {% if ready %}
 <script>
 (() => {
+  // Server-rendered so the keypad speaks the same language as the page.
+  const T = {
+    wrongPin:       {{ t("WRONG PIN") | tojson }},
+    wrongPinLeft:   {{ t("WRONG PIN · {n} LEFT") | tojson }},
+    noConnection:   {{ t("NO CONNECTION · TRY AGAIN") | tojson }},
+    alreadyRecorded:{{ t("Already recorded") | tojson }},
+    verbIn:         {{ t("IN") | tojson }},
+    verbOut:        {{ t("OUT") | tojson }},
+    viewHours:      {{ t("View recorded hours") | tojson }},
+    openCheckOut:   {{ t("Open check-out when leaving") | tojson }},
+    tooEarly:       {{ t("TOO EARLY") | tojson }},
+    opensAt:        {{ t("Opens {when}") | tojson }},
+    shiftOver:      {{ t("SHIFT OVER") | tojson }},
+    notCheckedIn:   {{ t("NOT CHECKED IN") | tojson }},
+    stillOnShift:   {{ t("STILL ON SHIFT") | tojson }},
+    checkOutOther:  {{ t("Check out of your other shift first") | tojson }},
+    notAvailable:   {{ t("NOT AVAILABLE") | tojson }},
+    seeSupervisor:  {{ t("See your supervisor") | tojson }},
+    locked:         {{ t("LOCKED") | tojson }},
+    lockedDetail:   {{ t("Try again in 15 min or see your supervisor") | tojson }},
+    linkNotValid:   {{ t("LINK NOT VALID") | tojson }},
+    tooManyTries:   {{ t("TOO MANY TRIES") | tojson }},
+    waitAMinute:    {{ t("Wait a minute") | tojson }},
+    systemDown:     {{ t("SYSTEM DOWN") | tojson }},
+    error:          {{ t("ERROR") | tojson }},
+    tryAgain:       {{ t("Try again") | tojson }},
+  };
+
   const TOKEN = {{ token | tojson }};
   const ACTION = {{ ('out' if s.state == 'ready_out' else 'in') | tojson }};
   const PIN_LENGTH = 4;
@@ -158,7 +193,7 @@
     renderDots('bg-red-500 border-red-500');
     message.className = 'mt-5 h-10 text-3xl font-black tracking-wide text-center text-red-500';
     message.textContent = attemptsLeft != null && attemptsLeft <= 2
-      ? `WRONG PIN · ${attemptsLeft} LEFT` : 'WRONG PIN';
+      ? T.wrongPinLeft.replace('{n}', attemptsLeft) : T.wrongPin;
     dotRow.classList.remove('shake');
     void dotRow.offsetWidth;            // restart the animation
     dotRow.classList.add('shake');
@@ -168,10 +203,11 @@
   function showSuccess(body) {
     buzz(200);
     const isOut = body.status === 'checked_out' || body.status === 'already_checked_out';
-    document.getElementById('success-verb').textContent = isOut ? 'OUT' : 'IN';
+    document.getElementById('success-verb').textContent = isOut ? T.verbOut : T.verbIn;
     document.getElementById('success-time').textContent = body.time || '';
     document.getElementById('success-note').textContent =
-      body.status.startsWith('already') ? 'Already recorded' : (body.worker_first_name || '');
+      body.status.startsWith('already') ? T.alreadyRecorded : (body.worker_first_name || '');
+    document.getElementById('success-next').textContent = isOut ? T.viewHours : T.openCheckOut;
     const panel = document.getElementById('success');
     panel.classList.remove('hidden');
     panel.classList.add('flex');
@@ -188,11 +224,11 @@
   }
 
   const CONFLICTS = {
-    too_early: b => ['TOO EARLY', `Opens ${b.opens_at || ''}`, true],
-    shift_ended: () => ['SHIFT OVER', 'See your supervisor'],
-    not_checked_in: () => ['NOT CHECKED IN', 'See your supervisor'],
-    checked_in_elsewhere: () => ['STILL ON SHIFT', 'Check out of your other shift first'],
-    not_available: () => ['NOT AVAILABLE', 'See your supervisor'],
+    too_early: b => [T.tooEarly, T.opensAt.replace('{when}', b.opens_at || ''), true],
+    shift_ended: () => [T.shiftOver, T.seeSupervisor],
+    not_checked_in: () => [T.notCheckedIn, T.seeSupervisor],
+    checked_in_elsewhere: () => [T.stillOnShift, T.checkOutOther],
+    not_available: () => [T.notAvailable, T.seeSupervisor],
   };
 
   async function submit() {
@@ -211,7 +247,7 @@
     } catch (err) {
       pin = ''; renderDots(); setBusy(false);
       message.className = 'mt-5 h-10 text-2xl font-black tracking-wide text-center text-amber-400';
-      message.textContent = 'NO CONNECTION · TRY AGAIN';
+      message.textContent = T.noConnection;
       buzz([80, 60, 80]);
       return;
     }
@@ -219,15 +255,15 @@
     if (response.ok) return showSuccess(body);
     switch (response.status) {
       case 401: return wrongPin(body.attempts_left);
-      case 423: return showStop('LOCKED', 'Try again in 15 min or see your supervisor');
+      case 423: return showStop(T.locked, T.lockedDetail);
       case 409: {
         const [title, detail, retry] = (CONFLICTS[body.error] || CONFLICTS.not_available)(body);
         return showStop(title, detail, retry);
       }
-      case 404: return showStop('LINK NOT VALID', 'See your supervisor');
-      case 429: return showStop('TOO MANY TRIES', 'Wait a minute', true);
-      case 503: return showStop('SYSTEM DOWN', 'See your supervisor', true);
-      default:  return showStop('ERROR', 'Try again', true);
+      case 404: return showStop(T.linkNotValid, T.seeSupervisor);
+      case 429: return showStop(T.tooManyTries, T.waitAMinute, true);
+      case 503: return showStop(T.systemDown, T.seeSupervisor, true);
+      default:  return showStop(T.error, T.tryAgain, true);
     }
   }
 

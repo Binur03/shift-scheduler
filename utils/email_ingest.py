@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import uuid
 from collections.abc import Mapping
 from datetime import date
 
@@ -71,6 +72,108 @@ def sender_authenticated(vendor: Vendor, fields: Mapping[str, str]) -> tuple[boo
     return True, ""
 
 
+def create_drafts(
+    record: InboundEmail,
+    body: str,
+    *,
+    today: date,
+    reference_date: date,
+    default_job: Job | None,
+) -> None:
+    """Parse ``body`` into DRAFT shifts attached to ``record``; sets status/errors and commits.
+
+    Job for each shift:
+      * pipe/labeled lines name the job ("position") -> matched to a Job title;
+      * shorthand lines ("9/5 20 @ 3pm parking") -> ``default_job``, with the
+        optional area word stored on the shift, never invented when absent.
+    """
+    result = parse_shift_email(body, today=today, reference_date=reference_date)
+    errors = [e.as_dict() for e in result.errors]
+    jobs_by_title = {j.title.strip().lower(): j for j in Job.query.all()}
+
+    created = 0
+    for line in result.shifts:
+        if line.position is not None:
+            job = jobs_by_title.get(line.position.lower())
+            missing = f"no job named '{line.position}' — add it on the Jobs page"
+        else:
+            job = default_job
+            missing = "no job selected for this schedule — pick one and paste it again"
+        if job is None:
+            errors.append({"line": line.line_no, "text": line.text, "error": missing})
+            continue
+
+        duplicate = Shift.query.filter_by(
+            job_id=job.id, date=line.work_date, start_time=line.start,
+            end_time=line.end, area=line.area,
+        ).first()
+        if duplicate is not None:
+            errors.append({
+                "line": line.line_no, "text": line.text,
+                "error": f"already scheduled (shift #{duplicate.id})",
+            })
+            continue
+        db.session.add(
+            Shift(
+                job_id=job.id,
+                date=line.work_date,
+                start_time=line.start,
+                end_time=line.end,     # None when the schedule gave no end
+                area=line.area,        # None when the schedule gave no area
+                required_headcount=line.headcount,
+                status=ShiftStatus.DRAFT,
+                source=ShiftSource.EMAIL,
+                vendor_id=record.vendor_id,
+                inbound_email_id=record.id,
+            )
+        )
+        created += 1
+
+    record.shifts_created = created
+    record.errors = sorted(errors, key=lambda e: e["line"])
+    if created and not errors:
+        record.parse_status = ParseStatus.PARSED
+    elif created:
+        record.parse_status = ParseStatus.PARTIAL
+    else:
+        record.parse_status = ParseStatus.FAILED
+    db.session.commit()
+
+
+def ingest_pasted_schedule(
+    text: str,
+    *,
+    job: Job,
+    sent_on: date | None = None,
+    subject: str = "",
+    today: date | None = None,
+) -> InboundEmail:
+    """An admin pasted a vendor's schedule. The admin session is the
+    authentication, so there is no DKIM step; each paste is its own record
+    (repeat pastes can't double-book: duplicate shifts are skipped)."""
+    today = today or utcnow_naive().date()
+    record = InboundEmail(
+        vendor_id=None,
+        source="paste",
+        message_id=f"<paste-{uuid.uuid4().hex}@shift-scheduler>",
+        from_address="",
+        subject=(subject or f"Pasted schedule for {job.title}")[:998],
+        raw_body=text,
+        dkim_result="",
+        received_at_utc=utcnow_naive(),
+        parse_status=ParseStatus.FAILED,
+        errors=[],
+    )
+    db.session.add(record)
+    db.session.commit()  # keep the raw text even if parsing fails
+    create_drafts(record, text, today=today, reference_date=sent_on or today, default_job=job)
+    logger.info(
+        "Pasted schedule %s for job %s: %s, %d draft shift(s), %d error(s)",
+        record.id, job.id, record.parse_status, record.shifts_created, len(record.errors),
+    )
+    return record
+
+
 def ingest_vendor_email(
     vendor: Vendor, fields: Mapping[str, str], *, today: date | None = None
 ) -> tuple[InboundEmail, bool]:
@@ -108,55 +211,10 @@ def ingest_vendor_email(
         logger.warning("Rejected inbound email %s for vendor %s: %s", email.id, vendor.id, reason)
         return email, True
 
-    result = parse_shift_email(body, today=today or utcnow_naive().date())
-    errors = [e.as_dict() for e in result.errors]
-    jobs_by_title = {j.title.strip().lower(): j for j in Job.query.all()}
-
-    created = 0
-    for line in result.shifts:
-        job = jobs_by_title.get(line.position.lower())
-        if job is None:
-            errors.append({
-                "line": line.line_no, "text": line.text,
-                "error": f"no job named '{line.position}' — add it on the Jobs page",
-            })
-            continue
-        duplicate = Shift.query.filter_by(
-            job_id=job.id, date=line.work_date, start_time=line.start, end_time=line.end
-        ).first()
-        if duplicate is not None:
-            errors.append({
-                "line": line.line_no, "text": line.text,
-                "error": f"already scheduled (shift #{duplicate.id})",
-            })
-            continue
-        db.session.add(
-            Shift(
-                job_id=job.id,
-                date=line.work_date,
-                start_time=line.start,
-                end_time=line.end,
-                required_headcount=line.headcount,
-                status=ShiftStatus.DRAFT,
-                source=ShiftSource.EMAIL,
-                vendor_id=vendor.id,
-                inbound_email_id=email.id,
-            )
-        )
-        created += 1
-
-    email.shifts_created = created
-    email.errors = sorted(errors, key=lambda e: e["line"])
-    if created and not errors:
-        email.parse_status = ParseStatus.PARSED
-    elif created:
-        email.parse_status = ParseStatus.PARTIAL
-    else:
-        email.parse_status = ParseStatus.FAILED
-    db.session.commit()
-
+    today = today or utcnow_naive().date()
+    create_drafts(email, body, today=today, reference_date=today, default_job=None)
     logger.info(
         "Inbound email %s (vendor %s): %s, %d draft shift(s), %d error(s)",
-        email.id, vendor.id, email.parse_status, created, len(errors),
+        email.id, vendor.id, email.parse_status, email.shifts_created, len(email.errors),
     )
     return email, True

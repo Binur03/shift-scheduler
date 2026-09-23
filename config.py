@@ -6,6 +6,7 @@ INSTANCE_CONNECTION_NAME is provided (the default for Cloud Run with the
 Cloud SQL connector), and fall back to TCP for local development.
 """
 import os
+from sqlalchemy.engine import URL
 
 
 def _build_db_uri() -> str:
@@ -25,18 +26,14 @@ def _build_db_uri() -> str:
     name = os.environ.get("DB_NAME", "shift_scheduler")
     instance_connection_name = os.environ.get("INSTANCE_CONNECTION_NAME")
 
-    if instance_connection_name:
-        # Unix socket (Cloud SQL on Cloud Run). The query string passes the
-        # socket path through to PyMySQL.
-        socket_path = f"/cloudsql/{instance_connection_name}"
-        return (
-            f"mysql+pymysql://{user}:{password}@/{name}"
-            f"?unix_socket={socket_path}"
-        )
+    connection = URL.create(
+        "mysql+pymysql", username=user, password=password, database=name,
+        host=None if instance_connection_name else os.environ.get("DB_HOST", "127.0.0.1"),
+        port=None if instance_connection_name else int(os.environ.get("DB_PORT", "3306")),
+        query={"unix_socket": f"/cloudsql/{instance_connection_name}"} if instance_connection_name else {},
+    )
+    return connection.render_as_string(hide_password=False)
 
-    host = os.environ.get("DB_HOST", "127.0.0.1")
-    port = os.environ.get("DB_PORT", "3306")
-    return f"mysql+pymysql://{user}:{password}@{host}:{port}/{name}"
 
 
 class Config:

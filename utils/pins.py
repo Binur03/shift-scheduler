@@ -66,6 +66,29 @@ def hash_pin(employee_id: int, pin: str) -> str:
     return hmac.new(_pepper(), f"{employee_id}:{pin}".encode(), hashlib.sha256).hexdigest()
 
 
+def default_pin_for(phone_number: str) -> str:
+    """Pilot default: the last 4 digits of the worker's phone number.
+
+    Easy for workers to remember, but anyone who knows a coworker's number
+    knows their default PIN — the per-link lockout still applies, and a
+    manager "Reset PIN" replaces it with a random one.
+    """
+    digits = re.sub(r"\D", "", phone_number or "")
+    if len(digits) < 4:
+        raise ValueError("phone number has fewer than 4 digits")
+    return digits[-4:]
+
+
+def set_default_pin(employee: Employee) -> str:
+    """Set the worker's PIN to the last 4 digits of their phone (caller commits)."""
+    if employee.id is None:
+        raise ValueError("employee must be flushed (have an id) before setting a PIN")
+    pin = default_pin_for(employee.phone_number)
+    employee.pin_hash = hash_pin(employee.id, pin)
+    employee.pin_set_at_utc = utcnow_naive()
+    return pin
+
+
 def set_new_pin(employee: Employee) -> str:
     """Issue a fresh PIN for ``employee`` (caller commits). Returns the PIN,
     which must be shown to the admin once and never stored or logged."""

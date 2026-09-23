@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest==8.4.2
+# PyMySQL needs this for MySQL 8 caching_sha2_password logins over TCP (local MySQL tests)
+cryptography==46.0.1

@@ -106,6 +106,16 @@ def utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def format_clock(t: time | None) -> str:
+    """12-hour clock for display, e.g. "1:00 PM" ("" for None)."""
+    return t.strftime("%I:%M %p").lstrip("0") if t else ""
+
+
+def format_shift_time(start: time, end: time | None) -> str:
+    """"1:00 PM" when the end isn't known, "10:00 AM – 6:00 PM" when it is."""
+    return format_clock(start) if end is None else f"{format_clock(start)} – {format_clock(end)}"
+
+
 def _duration_hours(start: time, end: time) -> float:
     """Return the length of a [start, end) window in hours.
 
@@ -135,6 +145,11 @@ class Employee(db.Model):
     # HMAC-SHA256(PIN_PEPPER, "<id>:<pin>") hex. See utils/pins.py.
     pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     pin_set_at_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # UI and SMS language for this worker: "en" or "es". Their private links
+    # and every text they receive are rendered in it.
+    language: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="en", server_default="en"
+    )
 
     assignments: Mapped[list["ShiftAssignment"]] = relationship(
         back_populates="employee",
@@ -184,7 +199,8 @@ class Employee(db.Model):
             .all()
         )
 
-        total = sum(_duration_hours(start, end) for start, end in rows)
+        # Open-ended shifts ("until the job is done") have no scheduled length.
+        total = sum(_duration_hours(start, end) for start, end in rows if end is not None)
         return round(total, 2)
 
     def __repr__(self) -> str:
@@ -256,7 +272,10 @@ class Shift(db.Model):
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
-    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    # NULL = no scheduled end ("until the job is done"). Only set when given.
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    # Optional area within the venue, e.g. "Parking". Only set when given.
+    area: Mapped[str | None] = mapped_column(String(80), nullable=True)
     required_headcount: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
@@ -298,8 +317,14 @@ class Shift(db.Model):
     )
 
     @property
-    def estimated_hours(self) -> float:
+    def estimated_hours(self) -> float | None:
+        if self.end_time is None:
+            return None
         return round(_duration_hours(self.start_time, self.end_time), 2)
+
+    @property
+    def time_label(self) -> str:
+        return format_shift_time(self.start_time, self.end_time)
 
     @property
     def accepted_count(self) -> int:
@@ -365,6 +390,11 @@ class ShiftAssignment(db.Model):
     check_out_message_sid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     check_in_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
     check_out_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The real moment of the check-in. Differs from check_in_at_utc only when
+    # the 5-minute grace period snapped an early punch to the shift start.
+    check_in_actual_at_utc: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Manager's reason for a manual punch, e.g. "IN: dead phone".
+    punch_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Web PIN punch: secret per-assignment link, issued when the worker accepts.
     punch_token: Mapped[str | None] = mapped_column(
@@ -387,6 +417,14 @@ class ShiftAssignment(db.Model):
         # Backs the "open punch for this worker" lookup on OUT.
         Index("ix_assignments_employee_punch", "employee_id", "check_out_at_utc"),
     )
+
+    @property
+    def check_in_was_snapped(self) -> bool:
+        return (
+            self.check_in_actual_at_utc is not None
+            and self.check_in_at_utc is not None
+            and self.check_in_actual_at_utc != self.check_in_at_utc
+        )
 
     @property
     def worked_hours(self) -> float | None:
@@ -445,8 +483,13 @@ class InboundEmail(db.Model):
     __tablename__ = "inbound_emails"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    vendor_id: Mapped[int] = mapped_column(
-        ForeignKey("vendors.id", ondelete="CASCADE"), nullable=False, index=True
+    # NULL for schedules pasted in by an admin (no vendor webhook involved).
+    vendor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("vendors.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # "email" (SendGrid webhook) or "paste" (admin pasted the text).
+    source: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="email", server_default="email"
     )
     message_id: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
@@ -467,8 +510,12 @@ class InboundEmail(db.Model):
     # [{"line": 7, "text": "...", "error": "..."}, ...]
     errors: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
-    vendor: Mapped["Vendor"] = relationship(back_populates="inbound_emails")
+    vendor: Mapped["Vendor | None"] = relationship(back_populates="inbound_emails")
     shifts: Mapped[list["Shift"]] = relationship(back_populates="inbound_email")
+
+    @property
+    def sender_label(self) -> str:
+        return self.vendor.name if self.vendor else "Pasted schedule"
 
     @property
     def draft_shifts(self) -> list["Shift"]:

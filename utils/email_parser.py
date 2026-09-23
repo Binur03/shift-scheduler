@@ -50,9 +50,24 @@ _LABELED_LINE = re.compile(
     re.IGNORECASE,
 )
 
+# Vendor shorthand, one shift per line: [date] <people> @ <start>[-<end>] [area]
+#   "9/2 20 @ 1pm"            date, 20 people, starts 1 PM, no end, no area
+#   "9/3 2 @ 6am parking"     ... area "parking"
+#   "20 @ 10 am-6pm"          no date: continues the date of the line above
+_SHORT_TIME = r"\d{1,2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?"
+_SHORTHAND_LINE = re.compile(
+    rf"^\s*(?:(?P<md>\d{{1,2}}/\d{{1,2}}(?:/\d{{2,4}})?)\s+)?"
+    rf"(?P<count>\d{{1,3}})\s*(?:people|ppl|workers|staff)?\s*@\s*"
+    rf"(?P<start>{_SHORT_TIME})"
+    rf"(?:\s*(?:-|–|—|\bto\b)\s*(?P<end>{_SHORT_TIME}))?"
+    rf"(?:\s+(?P<area>[A-Za-z][A-Za-z0-9&'./ -]{{0,60}}?))?\s*$",
+    re.IGNORECASE,
+)
+
 # Heuristics for "this line was meant to be a shift".
 _DATE_HINT = re.compile(r"\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4})\b")
 _RANGE_HINT = re.compile(rf"{_TIME}\s*(?:-|–|—|\bto\b)\s*{_TIME}", re.IGNORECASE)
+_SHORTHAND_HINT = re.compile(r"\d\s*@\s*\d")
 
 _TIME_PARTS = re.compile(
     r"^(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?:(?P<ap>[ap])\.?\s?m\.?)?$",
@@ -71,9 +86,10 @@ class ParsedShiftLine:
     text: str
     work_date: date
     start: time
-    end: time
-    position: str
+    end: time | None        # None: no end given ("until the job is done")
+    position: str | None    # job title (pipe/labeled formats)
     headcount: int
+    area: str | None = None  # optional area word (shorthand format)
 
 
 @dataclass(frozen=True)
@@ -131,12 +147,52 @@ def parse_date(raw: str) -> date:
         raise ValueError(f"'{raw}' is not a real calendar date") from None
 
 
-def _build_line(match: re.Match, line_no: int, text: str, today: date) -> ParsedShiftLine:
-    work_date = parse_date(match.group("date"))
+def infer_year(month: int, day: int, reference: date) -> date:
+    """Dates like "9/2" carry no year: pick the one nearest the reference date,
+    so a December email listing "1/3" lands in the following January."""
+    candidates = []
+    for year in (reference.year - 1, reference.year, reference.year + 1):
+        try:
+            candidates.append(date(year, month, day))
+        except ValueError:
+            continue
+    if not candidates:
+        raise ValueError(f"'{month}/{day}' is not a real calendar date")
+    return min(candidates, key=lambda d: abs((d - reference).days))
+
+
+def _parse_short_date(raw: str, reference: date) -> date:
+    parts = raw.split("/")
+    if len(parts) == 3:
+        return parse_date(raw)
+    return infer_year(int(parts[0]), int(parts[1]), reference)
+
+
+def _check_date_range(work_date: date, today: date) -> None:
     if work_date < today - timedelta(days=1):
-        raise ValueError(f"date {work_date:%m/%d/%Y} is in the past")
+        raise ValueError(f"{work_date:%a %m/%d/%Y} has already passed")
     if work_date > today + timedelta(days=366):
         raise ValueError(f"date {work_date:%m/%d/%Y} is more than a year out")
+
+
+def _build_shorthand(match: re.Match, work_date: date, line_no: int, text: str, today: date) -> ParsedShiftLine:
+    _check_date_range(work_date, today)
+    start = parse_time(match.group("start"))
+    end = parse_time(match.group("end")) if match.group("end") else None
+    if end is not None and start == end:
+        raise ValueError("start and end time are the same")
+    headcount = int(match.group("count"))
+    if not 1 <= headcount <= MAX_HEADCOUNT:
+        raise ValueError(f"number of people must be 1-{MAX_HEADCOUNT}")
+    area = re.sub(r"\s+", " ", match.group("area") or "").strip() or None
+    if area:
+        area = area[:1].upper() + area[1:]  # "parking" -> "Parking"
+    return ParsedShiftLine(line_no, text, work_date, start, end, None, headcount, area)
+
+
+def _build_line(match: re.Match, line_no: int, text: str, today: date) -> ParsedShiftLine:
+    work_date = parse_date(match.group("date"))
+    _check_date_range(work_date, today)
 
     start = parse_time(match.group("start"))
     end = parse_time(match.group("end"))
@@ -154,31 +210,50 @@ def _build_line(match: re.Match, line_no: int, text: str, today: date) -> Parsed
     return ParsedShiftLine(line_no, text, work_date, start, end, position, headcount)
 
 
-def parse_shift_email(body: str, *, today: date) -> ParseResult:
-    """Extract shift lines from a plain-text email body."""
+def parse_shift_email(body: str, *, today: date, reference_date: date | None = None) -> ParseResult:
+    """Extract shift lines from a plain-text email body.
+
+    ``today`` bounds acceptable dates (nothing already past); year-less
+    shorthand dates are resolved against ``reference_date`` (when the
+    schedule was sent), defaulting to ``today``.
+    """
     result = ParseResult()
     seen: set[tuple] = set()
+    reference = reference_date or today
+    current_date: date | None = None  # date carried to shorthand lines with no date
 
     for line_no, raw_line in enumerate((body or "").splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith(">"):
+            current_date = None  # a blank line ends a date's group of shifts
             continue
 
-        match = _PIPE_LINE.match(line) or _LABELED_LINE.match(line)
-        if match is None:
-            if _DATE_HINT.search(line) and _RANGE_HINT.search(line):
+        legacy = _PIPE_LINE.match(line) or _LABELED_LINE.match(line)
+        shorthand = None if legacy else _SHORTHAND_LINE.match(line)
+
+        if legacy is None and shorthand is None:
+            current_date = None
+            if (_DATE_HINT.search(line) and _RANGE_HINT.search(line)) or _SHORTHAND_HINT.search(line):
                 result.errors.append(
-                    LineError(line_no, line[:300], f"couldn't read this shift line; {FORMAT_HINT}")
+                    LineError(line_no, line[:300], "couldn't read this line — expected e.g. '9/5 20 @ 3pm parking'")
                 )
             continue
 
         try:
-            parsed = _build_line(match, line_no, line[:300], today)
+            if legacy is not None:
+                parsed = _build_line(legacy, line_no, line[:300], today)
+            else:
+                if shorthand.group("md"):
+                    current_date = None  # an invalid new date must not reuse the previous group
+                    current_date = _parse_short_date(shorthand.group("md"), reference)
+                elif current_date is None:
+                    raise ValueError("no date for this line — put a date on it or directly under a dated line")
+                parsed = _build_shorthand(shorthand, current_date, line_no, line[:300], today)
         except ValueError as exc:
             result.errors.append(LineError(line_no, line[:300], str(exc)))
             continue
 
-        key = (parsed.work_date, parsed.start, parsed.end, parsed.position.lower())
+        key = (parsed.work_date, parsed.start, parsed.end, (parsed.position or "").lower(), (parsed.area or "").lower())
         if key in seen:
             result.errors.append(LineError(line_no, line[:300], "duplicate of an earlier line"))
             continue

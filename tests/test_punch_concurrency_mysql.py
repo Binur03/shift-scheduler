@@ -261,6 +261,45 @@ def test_sms_and_web_racing_for_same_shift_check_in_once(mysql_app, world):
         assert sms_wins <= 1
 
 
+def test_manager_override_racing_worker_keypad_records_one_check_in(mysql_app, world):
+    """8 keypad 'in' taps + 8 manager manual check-ins for one worker at once:
+    exactly one timestamp wins and it is never overwritten by the others."""
+    from utils.manual_punch import manual_punch
+    from utils.timeutil import utc_naive_to_local
+
+    token, assignment_id = _web_setup(mysql_app, world, phone_index=6)
+    with mysql_app.app_context():
+        assignment = db.session.get(ShiftAssignment, assignment_id)
+        shift_id, employee_id, tz = assignment.shift_id, assignment.employee_id, assignment.shift.job.timezone
+        manager_local = utc_naive_to_local(utcnow_naive() - timedelta(minutes=10), tz).replace(tzinfo=None)
+
+    barrier = threading.Barrier(16)
+
+    def keypad():
+        client = mysql_app.test_client()
+        barrier.wait()
+        return client.post("/api/punch", json={"token": token, "pin": "4821", "action": "in"}).get_json()
+
+    def manager():
+        with mysql_app.app_context():
+            barrier.wait()
+            return manual_punch(shift_id=shift_id, employee_id=employee_id, action="in", local_time=manager_local)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        web_results = [pool.submit(keypad) for _ in range(8)]
+        manager_results = [pool.submit(manager) for _ in range(8)]
+        web = [f.result() for f in web_results]
+        managed = [f.result() for f in manager_results]
+
+    web_wins = sum(1 for body in web if body.get("status") == "checked_in")
+    manager_wins = sum(1 for result in managed if result.ok)
+    assert web_wins + manager_wins == 1, (web, managed)
+    with mysql_app.app_context():
+        assignment = db.session.get(ShiftAssignment, assignment_id)
+        assert assignment.check_in_at_utc is not None
+        assert assignment.check_in_source == ("web" if web_wins else "admin")
+
+
 def test_out_storm_across_workers_survives_gap_lock_deadlocks(mysql_app, world):
     """All workers check in, then all check out simultaneously; deadlock retries keep every OUT."""
     _fire_concurrently(mysql_app, [sms_params("IN", from_=p) for p in world["phones"]])
@@ -269,3 +308,30 @@ def test_out_storm_across_workers_survives_gap_lock_deadlocks(mysql_app, world):
     assert all(r.status_code == 200 for r in responses), [r.status_code for r in responses]
     with mysql_app.app_context():
         assert ShiftAssignment.query.filter(ShiftAssignment.check_out_at_utc.is_not(None)).count() == THREADS
+
+
+def test_acceptance_storm_never_overfills(mysql_app, world, monkeypatch):
+    from routes import worker as worker_routes
+    with mysql_app.app_context():
+        shift = db.session.get(Shift, world["shift_id"])
+        shift.required_headcount = 1
+        shift.status = ShiftStatus.OPEN
+        assignments = ShiftAssignment.query.filter_by(shift_id=shift.id).all()
+        for a in assignments:
+            a.status = AssignmentStatus.pending
+        tokens = [a.token for a in assignments]
+        db.session.commit()
+    barrier = threading.Barrier(THREADS)
+    original = worker_routes._load_assignment
+    def simultaneous_lookup(token):
+        row = original(token)
+        barrier.wait(timeout=20)
+        return row
+    monkeypatch.setattr(worker_routes, "_load_assignment", simultaneous_lookup)
+    def accept(token):
+        return mysql_app.test_client().post(f'/accept/{token}')
+    with ThreadPoolExecutor(max_workers=THREADS) as pool:
+        responses = list(pool.map(accept, tokens))
+    assert Counter(r.status_code for r in responses) == {200: 1, 409: THREADS - 1}
+    with mysql_app.app_context():
+        assert ShiftAssignment.query.filter_by(shift_id=world["shift_id"], status=AssignmentStatus.accepted).count() == 1

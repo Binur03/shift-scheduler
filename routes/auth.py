@@ -21,15 +21,14 @@ from flask import (
 )
 
 from extensions import limiter
+from utils.urls import safe_relative_path
 
 auth_bp = Blueprint("auth", __name__)
 
 
 def _safe_next(target: str | None) -> str:
     """Only allow same-site relative redirect targets."""
-    if target and target.startswith("/") and not target.startswith("//"):
-        return target
-    return url_for("admin.list_shifts")
+    return safe_relative_path(target) or url_for("admin.list_shifts")
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

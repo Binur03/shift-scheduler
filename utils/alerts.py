@@ -165,6 +165,8 @@ def send_shift_reminders(
             end_time=shift.end_time,
             # Also issues the token for assignments accepted before PIN punch existed.
             punch_url=punch_url(service.base_url, assignment),
+            area=shift.area,
+            lang=assignment.employee.language or "en",
         )
         if ok:
             assignment.reminder_sent_at = now

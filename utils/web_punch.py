@@ -35,9 +35,10 @@ from utils.punch import (
     check_in_window_utc,
     lock_employee,
     open_punch_for,
+    record_check_in,
     run_with_deadlock_retry,
 )
-from utils.timeutil import format_local_clock
+from utils.timeutil import format_local_clock, utc_naive_to_local
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,9 @@ class PunchResponse:
 def ensure_punch_token(assignment: ShiftAssignment) -> str:
     """Give an accepted assignment its secret punch link token (caller commits)."""
     if not assignment.punch_token:
-        assignment.punch_token = secrets.token_urlsafe(32)
+        # 128 bits, matching the acceptance token: unguessable but short
+        # enough to keep the reminder SMS inside its segment budget.
+        assignment.punch_token = secrets.token_urlsafe(16)
     return assignment.punch_token
 
 
@@ -100,6 +103,24 @@ def punch_state(assignment: ShiftAssignment, now_utc: datetime) -> str:
     return PunchState.READY_IN
 
 
+def opens_at_label(opens_at_utc: datetime, now_utc: datetime, tz_name: str | None) -> str:
+    """Clock time for the check-in window, with the weekday when it is not today.
+
+    A bare "Opens 2:00 PM" on a Wednesday for a Friday shift reads as "come
+    back in an hour". Naming the day prevents a wasted trip.
+    """
+    from utils.i18n import day_name, t
+
+    clock = format_local_clock(opens_at_utc, tz_name)
+    opens_local = utc_naive_to_local(opens_at_utc, tz_name)
+    today_local = utc_naive_to_local(now_utc, tz_name)
+    if opens_local is None or today_local is None:
+        return clock
+    if opens_local.date() == today_local.date():
+        return clock
+    return t("{day} at {time}", day=day_name(opens_local.date()), time=clock)
+
+
 def shift_summary(assignment: ShiftAssignment, now_utc: datetime) -> dict:
     """Venue-local facts for rendering the page / JSON responses.
 
@@ -113,11 +134,12 @@ def shift_summary(assignment: ShiftAssignment, now_utc: datetime) -> dict:
         "worker_first_name": assignment.employee.first_name,
         "job": job.title,
         "shift_date": f"{shift.date:%a %d %b}",
-        # 12-hour like the punch times, so workers never mix "13:58" with "2:18 PM".
-        "shift_time": f"{shift.start_time:%I:%M %p}".lstrip("0") + "–" + f"{shift.end_time:%I:%M %p}".lstrip("0"),
+        # 12-hour like the punch times; just the start when no end was given.
+        "shift_time": shift.time_label,
+        "area": shift.area,
         "check_in": format_local_clock(assignment.check_in_at_utc, job.timezone) or None,
         "check_out": format_local_clock(assignment.check_out_at_utc, job.timezone) or None,
-        "opens_at": format_local_clock(opens_at, job.timezone),
+        "opens_at": opens_at_label(opens_at, now_utc, job.timezone),
         "hours": assignment.worked_hours,
     }
 
@@ -233,12 +255,14 @@ def _apply(employee_id: int, assignment: ShiftAssignment, action: str, now_utc: 
             return PunchResponse(409, {"error": "checked_in_elsewhere"})
         if state == PunchState.TOO_EARLY:
             opens_at, _s, _e = check_in_window_utc(assignment)
-            return PunchResponse(409, {"error": "too_early", "opens_at": format_local_clock(opens_at, tz)})
+            return PunchResponse(409, {"error": "too_early", "opens_at": opens_at_label(opens_at, now_utc, tz)})
         if state == PunchState.ENDED:
             return PunchResponse(409, {"error": "shift_ended"})
-        assignment.check_in_at_utc = now_utc
-        assignment.check_in_source = PunchSource.WEB
-        return PunchResponse(200, {"status": "checked_in", "time": format_local_clock(now_utc, tz)})
+        record_check_in(assignment, now_utc, PunchSource.WEB)  # applies the 5-minute snap-to-start
+        return PunchResponse(200, {
+            "status": "checked_in",
+            "time": format_local_clock(assignment.check_in_at_utc, tz),
+        })
 
     # action == "out"
     if assignment.check_out_at_utc is not None:

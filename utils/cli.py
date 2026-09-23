@@ -145,19 +145,32 @@ def import_workers(csv_path: str, country_code: str) -> None:
         click.echo(f"No new workers to import. Skipped {skipped} row(s).")
         return
 
+    from utils.pins import PinConfigError, set_default_pin
+
     try:
-        # Fast path: single multi-row INSERT.
-        db.session.bulk_insert_mappings(Employee, to_insert)
+        # One transaction. Rows are flushed individually (not bulk-inserted)
+        # because each worker's default PIN hash needs their id.
+        employees = [Employee(**row) for row in to_insert]
+        db.session.add_all(employees)
+        db.session.flush()
+        for employee in employees:
+            set_default_pin(employee)  # last 4 digits of their phone
         db.session.commit()
-        inserted = len(to_insert)
+        inserted = len(employees)
+    except PinConfigError as exc:
+        db.session.rollback()
+        raise click.ClickException(f"{exc} No workers were imported.")
     except SQLAlchemyError:
         db.session.rollback()
-        logger.exception("Bulk insert failed; no workers were imported.")
+        logger.exception("Import failed; no workers were imported.")
         raise click.ClickException(
-            "Bulk insert failed (see logs). Transaction rolled back."
+            "Import failed (see logs). Transaction rolled back."
         )
 
-    click.echo(f"Imported {inserted} worker(s); skipped {skipped} row(s).")
+    click.echo(
+        f"Imported {inserted} worker(s); skipped {skipped} row(s). "
+        "Each worker's check-in PIN is the last 4 digits of their phone."
+    )
 
 
 @admin_cli.command("check-staffing")
@@ -174,13 +187,16 @@ def check_staffing() -> None:
 
 @admin_cli.command("issue-pins")
 @click.option("--all", "reissue_all", is_flag=True, help="Re-issue PINs for workers who already have one.")
-def issue_pins(reissue_all: bool) -> None:
+@click.option("--phone-default", is_flag=True, help="Use the last 4 digits of each phone instead of random PINs.")
+def issue_pins(reissue_all: bool, phone_default: bool) -> None:
     """Issue check-in PINs to active workers (default: only those without one).
 
     Prints name, phone, PIN as CSV to stdout exactly once — hand these out
     privately; PINs are stored only as keyed hashes and can't be recovered.
     """
-    from utils.pins import PinConfigError, set_new_pin
+    from utils.pins import PinConfigError, set_default_pin, set_new_pin
+
+    set_pin = set_default_pin if phone_default else set_new_pin
 
     query = Employee.query.filter_by(is_active=True)
     if not reissue_all:
@@ -193,7 +209,7 @@ def issue_pins(reissue_all: bool) -> None:
     writer = csv.writer(click.get_text_stream("stdout"))
     writer.writerow(["name", "phone_number", "pin"])
     try:
-        rows = [(e.full_name, e.phone_number, set_new_pin(e)) for e in employees]
+        rows = [(e.full_name, e.phone_number, set_pin(e)) for e in employees]
         db.session.commit()
     except PinConfigError as exc:
         db.session.rollback()

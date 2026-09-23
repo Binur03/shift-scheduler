@@ -3,8 +3,8 @@
 {% block content %}
 
 <div class="mb-6">
-  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Jobs</h1>
-  <p class="text-sm text-slate-500 mt-1">A job is a work site or role you schedule shifts for — its title and address appear in every worker invitation.</p>
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">{{ t("Jobs") }}</h1>
+  <p class="text-sm text-slate-500 mt-1">{{ t("A job is a work site or role you schedule shifts for — its title and address appear in every worker invitation.") }}</p>
 </div>
 
 {# ---------- Add job ---------- #}
@@ -14,30 +14,30 @@
       <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
     </span>
     <div>
-      <h2 class="font-semibold text-slate-900">Add a job</h2>
-      <p class="text-xs text-slate-500">Default crew size pre-fills new shifts; you can override it per shift.</p>
+      <h2 class="font-semibold text-slate-900">{{ t("Add a job") }}</h2>
+      <p class="text-xs text-slate-500">{{ t("Default crew size pre-fills new shifts; you can override it per shift.") }}</p>
     </div>
   </div>
   <form method="post" action="{{ url_for('admin.create_job') }}"
         class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">Job title</span>
-      <input name="title" placeholder="Warehouse crew" required
+      <span class="text-xs font-medium text-slate-600">{{ t("Job title") }}</span>
+      <input name="title" placeholder="{{ t('Warehouse crew') }}" required
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
     <label class="block md:col-span-2">
-      <span class="text-xs font-medium text-slate-600">Location address</span>
-      <input name="location_address" placeholder="4501 Brighton Blvd, Denver, CO" required
+      <span class="text-xs font-medium text-slate-600">{{ t("Location address") }}</span>
+      <input name="location_address" placeholder="{{ t('4501 Brighton Blvd, Denver, CO') }}" required
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">Default crew size</span>
+      <span class="text-xs font-medium text-slate-600">{{ t("Default crew size") }}</span>
       <input name="default_headcount" type="number" min="1" value="1"
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">Venue timezone</span>
+      <span class="text-xs font-medium text-slate-600">{{ t("Venue timezone") }}</span>
       <select name="timezone"
               class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
         {% for tz in venue_timezones %}
@@ -47,7 +47,7 @@
     </label>
     <button class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-      Add job
+      {{ t("Add job") }}
     </button>
   </form>
 </div>
@@ -65,23 +65,23 @@
     <form method="post" action="{{ url_for('admin.update_job', job_id=j.id) }}" class="space-y-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Title</span>
+        <span class="text-xs font-medium text-slate-600">{{ t("Title") }}</span>
         <input name="title" value="{{ j.title }}"
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">Address</span>
+        <span class="text-xs font-medium text-slate-600">{{ t("Address") }}</span>
         <input name="location_address" value="{{ j.location_address }}"
                class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
       </label>
       <div class="flex items-end justify-between gap-3">
         <label class="block w-32">
-          <span class="text-xs font-medium text-slate-600">Default crew</span>
+          <span class="text-xs font-medium text-slate-600">{{ t("Default crew") }}</span>
           <input name="default_headcount" type="number" min="1" value="{{ j.default_headcount }}"
                  class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
         </label>
         <label class="block flex-1">
-          <span class="text-xs font-medium text-slate-600">Timezone</span>
+          <span class="text-xs font-medium text-slate-600">{{ t("Timezone") }}</span>
           <select name="timezone"
                   class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
             {% for tz in venue_timezones %}
@@ -94,7 +94,7 @@
         </label>
         <button class="inline-flex items-center gap-1.5 border border-slate-300 text-slate-700 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-slate-50 transition">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-          Save changes
+          {{ t("Save changes") }}
         </button>
       </div>
     </form>
@@ -102,14 +102,14 @@
           class="mt-3 pt-3 border-t border-slate-100 text-right"
           onsubmit="return confirm('Delete this job and all of its shifts?');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-      <button class="text-xs font-medium text-rose-600 hover:text-rose-500 hover:underline">Delete job &amp; its shifts</button>
+      <button class="text-xs font-medium text-rose-600 hover:text-rose-500 hover:underline">{{ t("Delete job & its shifts") }}</button>
     </form>
   </div>
   {% else %}
   <div class="md:col-span-2 bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center">
     <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
-    <p class="text-sm font-medium text-slate-500">No jobs yet</p>
-    <p class="text-xs text-slate-400 mt-1">Add your first job above — then you can schedule shifts for it.</p>
+    <p class="text-sm font-medium text-slate-500">{{ t("No jobs yet") }}</p>
+    <p class="text-xs text-slate-400 mt-1">{{ t("Add your first job above — then you can schedule shifts for it.") }}</p>
   </div>
   {% endfor %}
 </div>

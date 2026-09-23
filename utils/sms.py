@@ -53,6 +53,9 @@ from dataclasses import dataclass
 from datetime import date, time
 from typing import TYPE_CHECKING, Iterable
 
+from models import format_shift_time
+from utils.gsm7 import to_gsm7
+
 if TYPE_CHECKING:  # avoid import cycle / hard SDK dependency at type-check time
     from models import ShiftAssignment
 
@@ -76,8 +79,9 @@ class ShiftBroadcastDetails:
     location_address: str
     work_date: date
     start_time: time
-    end_time: time
-    estimated_hours: float
+    end_time: time | None          # None = no scheduled end ("until the job is done")
+    estimated_hours: float | None
+    area: str | None = None        # e.g. "Parking"; shown only when given
 
     @property
     def date_text(self) -> str:
@@ -85,7 +89,7 @@ class ShiftBroadcastDetails:
 
     @property
     def time_text(self) -> str:
-        return f"{self.start_time:%H:%M}-{self.end_time:%H:%M}"
+        return format_shift_time(self.start_time, self.end_time)
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,9 @@ class BroadcastResult:
     sent: int
     failed: int
     total: int
+    # Workers whose message did not go out, so the console can name them.
+    # A count alone leaves a manager with nobody to call.
+    failed_names: tuple[str, ...] = ()
 
 
 class WhatsAppService:
@@ -196,10 +203,14 @@ class WhatsAppService:
         try:
             if self.channel == "sms":
                 # SMS has no template mechanism — always the plain body.
+                # Typographic punctuation would force the whole message to
+                # UCS-2 and roughly triple its segment count, so normalise it
+                # here, where every SMS body passes through. WhatsApp is UTF-8
+                # and needs no such treatment.
                 kwargs: dict[str, str] = {
                     "to": to,
                     "from_": self.sms_number,
-                    "body": body,
+                    "body": to_gsm7(body),
                 }
             else:
                 kwargs = {
@@ -230,19 +241,49 @@ class WhatsAppService:
     # ------------------------------------------------------------------ #
     # Shift invitations (broadcast)
     # ------------------------------------------------------------------ #
+    def _brand_prefix(self) -> str:
+        """"Rohan Binu: " so a worker knows instantly who is texting them.
+
+        Carriers filter unbranded traffic, and The Campaign Registry expects
+        the sender to be identifiable in the message itself. Empty when no
+        business name is configured, so nothing reads "None: ".
+        """
+        name = os.environ.get("BUSINESS_NAME", "").strip()
+        return f"{name}: " if name else ""
+
+    def _stop_suffix(self, lang: str = "en") -> str:
+        """Opt-out line. Required on SMS; WhatsApp has its own block controls."""
+        from utils.i18n import translate
+
+        if self.channel != "sms":
+            return ""
+        return "\n" + translate("Reply STOP to opt out.", lang)
+
     def _accept_url(self, token: str) -> str:
         return f"{self.base_url}/accept/{token}"
 
-    def _format_body(self, details: ShiftBroadcastDetails, token: str) -> str:
-        """Render the free-form fallback body for one invitation."""
+    def _format_body(
+        self, details: ShiftBroadcastDetails, token: str, lang: str = "en"
+    ) -> str:
+        """Render the free-form fallback body for one invitation, in ``lang``."""
+        from utils.i18n import format_date_short, translate
+
+        hours = (
+            " " + translate("(~{hours} hrs)", lang, hours=f"{details.estimated_hours:g}")
+            if details.estimated_hours
+            else ""
+        )
+        date_text = format_date_short(details.work_date, lang=lang, year=True)
         return (
-            f"New shift available: {details.title}\n"
-            f"Location: {details.location_address}\n"
-            f"Date: {details.date_text}\n"
-            f"Time: {details.time_text} "
-            f"(~{details.estimated_hours:g} hrs)\n\n"
-            f"Tap to accept (first come, first served):\n"
-            f"{self._accept_url(token)}"
+            self._brand_prefix()
+            + translate("New shift available: {title}", lang, title=details.title) + "\n"
+            + (translate("Area: {area}", lang, area=details.area) + "\n" if details.area else "")
+            + translate("Location: {address}", lang, address=details.location_address) + "\n"
+            + translate("Date: {date}", lang, date=date_text) + "\n"
+            + translate("Time: {time}", lang, time=details.time_text) + hours + "\n\n"
+            + translate("Accept (first come, first served):", lang) + "\n"
+            + self._accept_url(token)
+            + self._stop_suffix(lang)
         )
 
     def _invite_variables(
@@ -259,7 +300,8 @@ class WhatsAppService:
             "2": _template_var(details.location_address),
             "3": details.date_text,
             "4": details.time_text,
-            "5": f"{details.estimated_hours:g}",
+            # Template variables can't be empty; open-ended shifts say so.
+            "5": f"{details.estimated_hours:g}" if details.estimated_hours else "until done",
             "6": token,
         }
 
@@ -284,21 +326,25 @@ class WhatsAppService:
         sent = 0
         failed = 0
         total = 0
+        failed_names: list[str] = []
 
         for assignment in assignments:
             total += 1
             phone = getattr(assignment.employee, "phone_number", None)
+            worker_name = getattr(assignment.employee, "full_name", None) or "?"
             if not phone:
                 failed += 1
+                failed_names.append(worker_name)
                 logger.error(
                     "Skipping assignment id=%s: employee has no phone number.",
                     getattr(assignment, "id", "?"),
                 )
                 continue
 
+            worker_lang = getattr(assignment.employee, "language", None) or "en"
             ok = self._send(
                 phone,
-                body=self._format_body(job_details, assignment.token),
+                body=self._format_body(job_details, assignment.token, worker_lang),
                 content_sid=self.invite_content_sid,
                 content_variables=self._invite_variables(
                     job_details, assignment.token
@@ -309,11 +355,14 @@ class WhatsAppService:
                 sent += 1
             else:
                 failed += 1
+                failed_names.append(worker_name)
 
         logger.info(
             "Broadcast complete: sent=%d failed=%d total=%d", sent, failed, total
         )
-        return BroadcastResult(sent=sent, failed=failed, total=total)
+        return BroadcastResult(
+            sent=sent, failed=failed, total=total, failed_names=tuple(failed_names)
+        )
 
     # ------------------------------------------------------------------ #
     # Day-before worker reminder
@@ -326,8 +375,10 @@ class WhatsAppService:
         location_address: str,
         work_date: date,
         start_time: time,
-        end_time: time,
+        end_time: time | None,
         punch_url: str | None = None,
+        area: str | None = None,
+        lang: str = "en",
     ) -> bool:
         """Remind one confirmed worker about their upcoming shift.
 
@@ -336,14 +387,24 @@ class WhatsAppService:
         included in the SMS / free-form body; the approved WhatsApp template
         has no slot for it yet.
         """
-        date_text = f"{work_date:%a %d %b}"
-        time_text = f"{start_time:%H:%M}-{end_time:%H:%M}"
+        from utils.i18n import format_date_short, translate
+
+        date_text = format_date_short(work_date, lang=lang)
+        time_text = format_shift_time(start_time, end_time)
         body = (
-            f"Reminder: you're confirmed for {title}\n"
-            f"Location: {location_address}\n"
-            f"{date_text} {time_text}\n\n"
-            + (f"Check in when you arrive: {punch_url}\n\n" if punch_url else "")
-            + "If you can no longer make it, contact your coordinator ASAP."
+            self._brand_prefix()
+            + translate("Reminder: you're confirmed for {title}", lang, title=title) + "\n"
+            + (translate("Area: {area}", lang, area=area) + "\n" if area else "")
+            + translate("Location: {address}", lang, address=location_address) + "\n"
+            + f"{date_text} {time_text}" + "\n\n"
+            + (
+                translate("Check in when you arrive: {url}", lang, url=punch_url) + "\n\n"
+                if punch_url else ""
+            )
+            + translate(
+                "If you can no longer make it, contact your coordinator ASAP.", lang
+            )
+            + self._stop_suffix(lang)
         )
         return self._send(
             phone,
@@ -368,7 +429,7 @@ class WhatsAppService:
         location_address: str,
         work_date: date,
         start_time: time,
-        end_time: time,
+        end_time: time | None,
         accepted: int,
         required: int,
         admin_number: str | None = None,
@@ -383,7 +444,7 @@ class WhatsAppService:
             logger.error("ADMIN_WHATSAPP_NUMBER not set; cannot send admin alert.")
             return False
         date_text = f"{work_date:%a %d %b}"
-        time_text = f"{start_time:%H:%M}-{end_time:%H:%M}"
+        time_text = format_shift_time(start_time, end_time)
         body = (
             f"⚠️ Staffing alert: {title} @ {location_address}\n"
             f"{date_text} {time_text} — {accepted}/{required} confirmed "

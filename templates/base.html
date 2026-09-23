@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_language() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,6 +14,19 @@
     };
   </script>
   <style>
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 3px solid #818cf8; outline-offset: 3px; }
+    /* Spanish labels are much wider than English ("Bandeja de entrada" vs
+       "Inbox"), so the links move to their own row well before phone widths. */
+    @media (max-width: 1023px) {
+      .manager-nav { flex-wrap: wrap; padding-top: .75rem; padding-bottom: .5rem; }
+      .manager-links { order: 3; width: 100%; margin-left: 0; overflow-x: auto; padding: .5rem 0; }
+      .manager-links a { flex: 1; justify-content: center; min-height: 44px; padding: .5rem; }
+    }
+    @media (max-width: 639px) {
+      .manager-links svg { display: none; }
+      main input, main select, main textarea { font-size: 16px !important; }
+    }
     ::selection { background: #c7d2fe; }
     details > summary { list-style: none; cursor: pointer; }
     details > summary::-webkit-details-marker { display: none; }
@@ -24,7 +37,7 @@
 <body class="bg-slate-100/70 text-slate-800 min-h-screen flex flex-col antialiased">
   {% block nav %}
   <nav class="bg-white/90 backdrop-blur sticky top-0 z-20 border-b border-slate-200 shadow-sm">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center gap-2 sm:gap-6">
+    <div class="manager-nav max-w-6xl mx-auto px-4 min-h-16 flex items-center gap-2 sm:gap-6">
       <a href="{{ url_for('admin.list_shifts') }}" class="flex items-center gap-2.5 shrink-0">
         <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md shadow-indigo-600/30 flex items-center justify-center">
           <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -33,19 +46,19 @@
         </span>
         <span class="hidden sm:flex flex-col leading-tight">
           <span class="font-bold text-slate-900 tracking-tight">Shift Scheduler</span>
-          <span class="text-[11px] font-medium text-indigo-600 uppercase tracking-wider">Admin console</span>
+          <span class="text-[11px] font-medium text-indigo-600 uppercase tracking-wider">{{ t("Admin console") }}</span>
         </span>
       </a>
 
       {% set ep = request.endpoint or '' %}
-      <div class="flex items-center gap-1 ml-1 sm:ml-4">
+      <div class="manager-links flex items-center gap-1 ml-1 sm:ml-4">
         <a href="{{ url_for('admin.list_shifts') }}"
            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition
                   {{ 'bg-indigo-50 text-indigo-700' if 'shift' in ep else 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' }}">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
           </svg>
-          Shifts
+          {{ t("Shifts") }}
         </a>
         <a href="{{ url_for('admin.list_jobs') }}"
            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition
@@ -53,7 +66,7 @@
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.098a2.25 2.25 0 0 1-2.03 2.24 48.9 48.9 0 0 1-8.44 0 2.25 2.25 0 0 1-2.03-2.24v-4.098m12.5-3.9v-2a2.25 2.25 0 0 0-2.25-2.25h-8a2.25 2.25 0 0 0-2.25 2.25v2m12.5 0a48.1 48.1 0 0 0-12.5 0m12.5 0c.966.12 1.75.943 1.75 1.918v1.883c0 .969-.783 1.766-1.746 1.882a48 48 0 0 1-12.508 0C4.533 15.817 3.75 15.02 3.75 14.05v-1.882c0-.975.784-1.799 1.75-1.919M12 6V4.875C12 4.254 11.496 3.75 10.875 3.75h-1.75" transform="translate(0.5,0)"/>
           </svg>
-          Jobs
+          {{ t("Jobs") }}
         </a>
         <a href="{{ url_for('admin.list_employees') }}"
            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition
@@ -61,7 +74,7 @@
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
           </svg>
-          Workers
+          {{ t("Workers") }}
         </a>
         <a href="{{ url_for('admin.list_inbound') }}"
            class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition
@@ -69,17 +82,21 @@
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" />
           </svg>
-          Inbox
+          {{ t("Inbox") }}
         </a>
       </div>
 
-      <form method="post" action="{{ url_for('auth.logout') }}" class="ml-auto">
+      <div class="ml-auto flex items-center gap-2">
+        {% include "_language_toggle.html" %}
+      </div>
+
+      <form method="post" action="{{ url_for('auth.logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <button class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
+        <button aria-label="{{ t('Log out') }}" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
           </svg>
-          <span class="hidden sm:inline">Log out</span>
+          <span class="hidden sm:inline">{{ t("Log out") }}</span>
         </button>
       </form>
     </div>
@@ -89,18 +106,25 @@
   <main class="max-w-6xl w-full mx-auto px-4 py-8 flex-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="mb-6 space-y-2">
+        <div class="mb-6 space-y-2" role="status" aria-live="polite">
           {% for category, message in messages %}
             {% if category == 'success' %}
-            <div class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm">
-              <svg class="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <div class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-base text-emerald-800 shadow-sm">
+              <svg class="w-6 h-6 mt-0.5 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
               </svg>
               <span>{{ message }}</span>
             </div>
+            {% elif category == 'info' %}
+            <div class="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-base text-sky-900 shadow-sm">
+              <svg class="w-6 h-6 mt-0.5 shrink-0 text-sky-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25h.75v4.5h.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+              </svg>
+              <span>{{ message }}</span>
+            </div>
             {% else %}
-            <div class="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm">
-              <svg class="w-5 h-5 mt-0.5 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <div class="flex items-start gap-3 rounded-xl border-2 border-rose-300 bg-rose-50 px-4 py-4 text-base font-semibold text-rose-900 shadow-sm">
+              <svg class="w-7 h-7 mt-0.5 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
               </svg>
               <span>{{ message }}</span>
@@ -115,7 +139,7 @@
   </main>
 
   <footer class="py-6 text-center text-xs text-slate-400">
-    Shift Scheduler · workforce dispatch &amp; scheduling
+    Shift Scheduler · {{ t("workforce dispatch & scheduling") }}
   </footer>
 </body>
 </html>

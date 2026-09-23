@@ -3,8 +3,8 @@
 {% block content %}
 
 <div class="mb-6">
-  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Workers</h1>
-  <p class="text-sm text-slate-500 mt-1">Everyone here receives shift invitations when you dispatch. Deactivate someone to pause their invites without losing their history.</p>
+  <h1 class="text-2xl font-bold text-slate-900 tracking-tight">{{ t("Workers") }}</h1>
+  <p class="text-sm text-slate-500 mt-1">{{ t("Everyone here receives shift invitations when you dispatch. Deactivate someone to pause their invites without losing their history.") }}</p>
 </div>
 
 {# ---------- Timesheet export ---------- #}
@@ -15,24 +15,24 @@
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
       </span>
       <div>
-        <h2 class="font-semibold text-slate-900">Export timesheet</h2>
-        <p class="text-xs text-slate-500">Hours from texted IN/OUT punches, in each venue's local time, with missing and late punches flagged.</p>
+        <h2 class="font-semibold text-slate-900">{{ t("Export timesheet") }}</h2>
+        <p class="text-xs text-slate-500">{{ t("Hours from texted IN/OUT punches, in each venue's local time, with missing and late punches flagged.") }}</p>
       </div>
     </div>
     <form method="get" action="{{ url_for('admin.export_timesheets') }}" class="flex flex-wrap gap-3 items-end">
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">From</span>
+        <span class="text-xs font-medium text-slate-600">{{ t("From") }}</span>
         <input name="start" type="date" required value="{{ timesheet_start }}"
                class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
       </label>
       <label class="block">
-        <span class="text-xs font-medium text-slate-600">To</span>
+        <span class="text-xs font-medium text-slate-600">{{ t("To") }}</span>
         <input name="end" type="date" required value="{{ timesheet_end }}"
                class="mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
       </label>
       <button class="inline-flex items-center gap-2 bg-emerald-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-500 shadow-sm shadow-emerald-600/30 transition">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-        Download CSV
+        {{ t("Download CSV") }}
       </button>
     </form>
   </div>
@@ -45,31 +45,40 @@
       <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>
     </span>
     <div>
-      <h2 class="font-semibold text-slate-900">Add a worker</h2>
-      <p class="text-xs text-slate-500">Phone number can be typed any way — 303-555-0123 works fine.</p>
+      <h2 class="font-semibold text-slate-900">{{ t("Add a worker") }}</h2>
+      <p class="text-xs text-slate-500">{{ t("Phone number can be typed any way — 303-555-0123 works fine.") }}</p>
     </div>
   </div>
   <form method="post" action="{{ url_for('admin.create_employee') }}"
         class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">First name</span>
-      <input name="first_name" placeholder="Maria" required
+      <span class="text-xs font-medium text-slate-600">{{ t("First name") }}</span>
+      <input name="first_name" placeholder="{{ t('Maria') }}" required
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">Last name</span>
-      <input name="last_name" placeholder="Lopez" required
+      <span class="text-xs font-medium text-slate-600">{{ t("Last name") }}</span>
+      <input name="last_name" placeholder="{{ t('Lopez') }}" required
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
     <label class="block">
-      <span class="text-xs font-medium text-slate-600">Mobile number</span>
+      <span class="text-xs font-medium text-slate-600">{{ t("Mobile number") }}</span>
       <input name="phone_number" placeholder="303-555-0123" required
              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
     </label>
+    <label class="block">
+      <span class="text-xs font-medium text-slate-600">{{ t("Language") }}</span>
+      <select name="language"
+              class="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500">
+        {% for code, label in supported_languages.items() %}
+        <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <button class="inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-      Add worker
+      {{ t("Add worker") }}
     </button>
   </form>
 </div>
@@ -77,17 +86,18 @@
 {# ---------- Roster ---------- #}
 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
   <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-    <h2 class="font-semibold text-slate-900">Roster</h2>
+    <h2 class="font-semibold text-slate-900">{{ t("Roster") }}</h2>
     <span class="text-xs text-slate-400">{{ employees | selectattr('is_active') | list | length }} active of {{ employees | length }}</span>
   </div>
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="bg-slate-50 text-slate-500 text-left text-xs uppercase tracking-wider">
         <tr>
-          <th class="px-6 py-3 font-semibold">Worker</th>
-          <th class="px-4 py-3 font-semibold">Phone</th>
-          <th class="px-4 py-3 font-semibold">Status</th>
-          <th class="px-6 py-3 text-right font-semibold">Actions</th>
+          <th class="px-6 py-3 font-semibold">{{ t("Worker") }}</th>
+          <th class="px-4 py-3 font-semibold">{{ t("Phone") }}</th>
+          <th class="px-4 py-3 font-semibold">{{ t("Language") }}</th>
+          <th class="px-4 py-3 font-semibold">{{ t("Status") }}</th>
+          <th class="px-6 py-3 text-right font-semibold">{{ t("Actions") }}</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-100">
@@ -103,13 +113,28 @@
           </td>
           <td class="px-4 py-3.5 text-slate-600 font-mono text-xs">{{ e.phone_number }}</td>
           <td class="px-4 py-3.5">
+            <form method="post" action="{{ url_for('admin.set_employee_language', employee_id=e.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <select name="language" onchange="this.form.submit()"
+                      aria-label="{{ t('Language for this worker') }}"
+                      class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40">
+                {% for code, label in supported_languages.items() %}
+                <option value="{{ code }}" {{ "selected" if e.language == code }}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <noscript>
+                <button class="ml-1 text-xs underline">{{ t("Save") }}</button>
+              </noscript>
+            </form>
+          </td>
+          <td class="px-4 py-3.5">
             {% if e.is_active %}
               <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> {{ t("Active") }}
               </span>
             {% else %}
               <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-600">
-                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactive
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> {{ t("Inactive") }}
               </span>
             {% endif %}
           </td>
@@ -126,28 +151,28 @@
               {% if e.is_active %}
               <form method="post" action="{{ url_for('admin.deactivate_employee', employee_id=e.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <button class="text-xs font-medium text-amber-700 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-50 transition">Deactivate</button>
+                <button class="text-xs font-medium text-amber-700 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-50 transition">{{ t("Deactivate") }}</button>
               </form>
               {% else %}
               <form method="post" action="{{ url_for('admin.activate_employee', employee_id=e.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <button class="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50 transition">Reactivate</button>
+                <button class="text-xs font-medium text-emerald-700 border border-emerald-200 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50 transition">{{ t("Reactivate") }}</button>
               </form>
               {% endif %}
               <form method="post" action="{{ url_for('admin.delete_employee', employee_id=e.id) }}"
                     onsubmit="return confirm('Delete this worker? This removes their history too — deactivating is usually better.');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                <button class="text-xs font-medium text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition">Delete</button>
+                <button class="text-xs font-medium text-rose-600 border border-rose-200 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 transition">{{ t("Delete") }}</button>
               </form>
             </div>
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="4" class="px-6 py-12 text-center">
+          <td colspan="5" class="px-6 py-12 text-center">
             <svg class="w-10 h-10 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
-            <p class="text-sm font-medium text-slate-500">No workers yet</p>
-            <p class="text-xs text-slate-400 mt-1">Add your first worker above — they'll get shift invites by text.</p>
+            <p class="text-sm font-medium text-slate-500">{{ t("No workers yet") }}</p>
+            <p class="text-xs text-slate-400 mt-1">{{ t("Add your first worker above — they'll get shift invites by text.") }}</p>
           </td>
         </tr>
         {% endfor %}

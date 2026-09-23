@@ -1,13 +1,13 @@
 {% extends "worker/_layout.html" %}
-{% block title %}Shift confirmed · Shift Scheduler{% endblock %}
+{% block title %}{{ t("Shift confirmed") }} · Shift Scheduler{% endblock %}
 {% block card %}
 <div class="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
 <div class="p-7 text-center">
   <div class="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
     <svg class="w-8 h-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
   </div>
-  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">You're confirmed!</h1>
-  <p class="text-sm text-slate-500 mb-6">Thanks {{ assignment.employee.first_name }} — this spot is yours. See you there.</p>
+  <h1 class="text-xl font-bold text-slate-900 tracking-tight mb-1">{{ t("You're confirmed!") }}</h1>
+  <p class="text-sm text-slate-500 mb-6">{{ t("Thanks {name} — this spot is yours. See you there.", name=assignment.employee.first_name) }}</p>
 
   <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-5 text-left space-y-3">
     <p class="font-semibold text-slate-900 text-base">{{ shift.job.title }}</p>
@@ -17,16 +17,31 @@
     </p>
     <p class="flex items-center gap-2.5 text-sm text-slate-600">
       <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
-      {{ shift.date.strftime('%A, %d %B %Y') }}
+      {{ format_date_long(shift.date) }}
     </p>
     <p class="flex items-center gap-2.5 text-sm text-slate-600">
       <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
-      {{ shift.start_time.strftime('%H:%M') }}–{{ shift.end_time.strftime('%H:%M') }}
+      {{ shift.time_label }}{% if shift.area %} · {{ shift.area }}{% endif %}
     </p>
   </div>
 
-  <p class="text-xs text-slate-400 mt-5">
-    Can't make it anymore? Contact your coordinator as soon as possible.
+  <div class="mt-5 space-y-3">
+    <form method="post" action="{{ url_for('worker.open_check_in', token=assignment.token) }}">
+      <button class="w-full rounded-xl bg-indigo-600 text-white px-4 py-4 font-semibold shadow-md shadow-indigo-600/20 hover:bg-indigo-500">{{ t('View recorded hours') if assignment.check_out_at_utc else (t('Open check-out') if assignment.check_in_at_utc else t('Open check-in')) }}</button>
+    </form>
+    <a href="https://www.google.com/maps/search/?api=1&amp;query={{ shift.job.location_address | urlencode }}" target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-700">{{ t("Get directions") }}</a>
+  </div>
+  <div class="mt-5 text-left rounded-xl bg-indigo-50 p-4 text-sm text-indigo-950">
+    <p class="font-semibold">{{ t("What happens next") }}</p>
+    <ol class="mt-2 space-y-2 list-decimal pl-5">
+      <li>{{ t("Keep this private link to find your shift again.") }}</li>
+      <li>{{ t("When you arrive, open check-in and enter your 4-digit PIN.") }}</li>
+      <li>{{ t("When you finish, open the link again to check out.") }}</li>
+    </ol>
+    <p class="mt-3 text-sm text-indigo-700">{{ t("Opening the screen does not clock you in. Entering your PIN records the action shown.") }}</p>
+  </div>
+  <p class="text-sm text-slate-500 mt-5">
+    {{ t("Can't make it anymore? Contact your coordinator as soon as possible.") }}
   </p>
 </div>
 {% endblock %}

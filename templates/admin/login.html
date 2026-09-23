@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_language() }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Log in · Shift Scheduler</title>
+  <title>{{ t("Log in") }} · Shift Scheduler</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -17,6 +17,10 @@
 <body class="min-h-screen antialiased bg-slate-100 flex items-center justify-center px-4
              bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.15),_transparent_60%)]">
   <div class="max-w-sm w-full">
+    <div class="flex justify-center mb-4">
+      {% include "_language_toggle.html" %}
+    </div>
+
     <div class="flex flex-col items-center mb-6">
       <span class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-lg shadow-indigo-600/30 flex items-center justify-center mb-3">
         <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -24,7 +28,7 @@
         </svg>
       </span>
       <h1 class="text-xl font-bold text-slate-900 tracking-tight">Shift Scheduler</h1>
-      <p class="text-sm text-slate-500">Sign in to the admin console</p>
+      <p class="text-base text-slate-500">{{ t("Sign in to the admin console") }}</p>
     </div>
 
     <div class="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200 p-8">
@@ -40,16 +44,16 @@
       <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="next" value="{{ request.args.get('next', '') }}" />
-        <label class="block text-sm font-medium text-slate-700 mb-1.5" for="password">Admin password</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1.5" for="password">{{ t("Admin password") }}</label>
         <input id="password" name="password" type="password" required autofocus
                class="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500" />
         <button class="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-          Sign in
+          {{ t("Sign in") }}
         </button>
       </form>
     </div>
-    <p class="text-center text-xs text-slate-400 mt-6">Workforce dispatch &amp; scheduling</p>
+    <p class="text-center text-xs text-slate-400 mt-6">{{ t("Workforce dispatch & scheduling") }}</p>
   </div>
 </body>
 </html>
