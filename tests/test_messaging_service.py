@@ -1,5 +1,8 @@
 """Sending through the A2P Messaging Service rather than a bare number.
 
+The service SID below is a placeholder: the real one lives in the Cloud Run
+environment, not in source.
+
 10DLC binds the campaign to a Messaging Service. Sending with
 ``messaging_service_sid`` lets Twilio choose the sender and apply opt-out
 state; sending with a bare ``from_`` bypasses that. The fallback to a plain
@@ -45,11 +48,11 @@ class TestSendingSender:
             monkeypatch,
             MESSAGING_CHANNEL="sms",
             TWILIO_SMS_NUMBER="+17207296593",
-            TWILIO_MESSAGING_SERVICE_SID="MG2de0f80e8aa5072e8740977256b8f2dc",
+            TWILIO_MESSAGING_SERVICE_SID="MG00000000000000000000000000000001",
         )
         svc._send("+17205550101", body="hello")
 
-        assert rec.sent["messaging_service_sid"] == "MG2de0f80e8aa5072e8740977256b8f2dc"
+        assert rec.sent["messaging_service_sid"] == "MG00000000000000000000000000000001"
         assert "from_" not in rec.sent, "a bare from_ bypasses the campaign's service"
         assert rec.sent["to"] == "+17205550101"
 
@@ -69,7 +72,7 @@ class TestSendingSender:
             monkeypatch,
             MESSAGING_CHANNEL="whatsapp",
             TWILIO_WHATSAPP_NUMBER="+17207296593",
-            TWILIO_MESSAGING_SERVICE_SID="MG2de0f80e8aa5072e8740977256b8f2dc",
+            TWILIO_MESSAGING_SERVICE_SID="MG00000000000000000000000000000001",
         )
         svc._send("+17205550101", body="hello")
 
@@ -81,7 +84,7 @@ class TestSendingSender:
         svc, rec = _service(
             monkeypatch,
             MESSAGING_CHANNEL="sms",
-            TWILIO_MESSAGING_SERVICE_SID="MG2de0f80e8aa5072e8740977256b8f2dc",
+            TWILIO_MESSAGING_SERVICE_SID="MG00000000000000000000000000000001",
         )
         svc._send("+17205550101", body="3:00 PM – 11:00 PM")
 
