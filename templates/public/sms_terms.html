@@ -18,10 +18,21 @@
   <section>
     <h2 class="text-lg font-semibold text-slate-900">How you opt in</h2>
     <p class="mt-2">
-      When you join our crew, you give your supervisor your mobile number and agree to receive
-      work-related text messages from {{ b.name }}. We only text numbers that workers have provided
-      to us for this purpose. Agreeing to texts is not a condition of any purchase.
+      Consent is collected verbally and in person. When you join our crew, before any text is
+      sent, your supervisor reads you the script below and records your name, mobile number,
+      the date, and that you agreed. We only text numbers that workers have given us for this
+      purpose. Agreeing to texts is not a condition of any purchase, and workers who decline
+      receive their schedule directly from their supervisor.
     </p>
+    <blockquote class="mt-4 border-l-4 border-indigo-200 bg-indigo-50/60 px-4 py-3 italic">
+      &ldquo;Before I add you to the schedule: {{ b.name }} sends work-schedule text messages{% if b.sms_number %}
+      from {{ b.sms_number }}{% endif %} &mdash; shift offers, shift reminders, and check-in links.
+      Message frequency varies with your schedule. Message and data rates may apply. You can reply
+      STOP anytime to stop the texts, or HELP for help. Your mobile number and your consent to
+      receive texts are not shared with third parties or affiliates for marketing or promotional
+      purposes. Our SMS terms and privacy policy are linked on our website. Do you agree to receive
+      these text messages at this number?&rdquo;
+    </blockquote>
   </section>
 
   <section>
@@ -45,7 +56,9 @@
   <section>
     <h2 class="text-lg font-semibold text-slate-900">Your information</h2>
     <p class="mt-2">
-      Mobile numbers and text-message consent are never sold or shared with third parties for marketing.
+      We do not sell, rent, or share mobile phone numbers or text-message opt-in information with
+      third parties or affiliates for marketing or promotional purposes. Mobile information is used
+      only to run this work-notification program.
       See our <a href="{{ url_for('public.privacy') }}" class="text-indigo-700 underline">Privacy Policy</a>.
     </p>
   </section>
