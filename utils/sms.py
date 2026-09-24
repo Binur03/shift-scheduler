@@ -115,6 +115,7 @@ class WhatsAppService:
         base_url: str | None = None,
         channel: str | None = None,
         sms_number: str | None = None,
+        messaging_service_sid: str | None = None,
     ) -> None:
         self.account_sid = account_sid or os.environ.get("TWILIO_ACCOUNT_SID")
         self.auth_token = auth_token or os.environ.get("TWILIO_AUTH_TOKEN")
@@ -125,6 +126,11 @@ class WhatsAppService:
             channel or os.environ.get("MESSAGING_CHANNEL", "whatsapp")
         ).strip().lower()
         self.sms_number = sms_number or os.environ.get("TWILIO_SMS_NUMBER")
+        # When set, SMS goes out through the Messaging Service that the A2P
+        # 10DLC campaign is registered against, rather than a bare number.
+        self.messaging_service_sid = messaging_service_sid or os.environ.get(
+            "TWILIO_MESSAGING_SERVICE_SID"
+        )
         self.base_url = (
             base_url or os.environ.get("PUBLIC_BASE_URL", "http://localhost:8080")
         ).rstrip("/")
@@ -154,7 +160,11 @@ class WhatsAppService:
         environments without credentials (local dev, CI); ``send_shift_broadcast``
         degrades to logging instead of raising at import time.
         """
-        sender = self.sms_number if self.channel == "sms" else self.whatsapp_number
+        if self.channel == "sms":
+            # Either is a usable sender; the service takes precedence below.
+            sender = self.messaging_service_sid or self.sms_number
+        else:
+            sender = self.whatsapp_number
         if not (self.account_sid and self.auth_token and sender):
             logger.warning(
                 "Messaging service is not fully configured for channel=%s "
@@ -207,11 +217,11 @@ class WhatsAppService:
                 # UCS-2 and roughly triple its segment count, so normalise it
                 # here, where every SMS body passes through. WhatsApp is UTF-8
                 # and needs no such treatment.
-                kwargs: dict[str, str] = {
-                    "to": to,
-                    "from_": self.sms_number,
-                    "body": to_gsm7(body),
-                }
+                kwargs: dict[str, str] = {"to": to, "body": to_gsm7(body)}
+                if self.messaging_service_sid:
+                    kwargs["messaging_service_sid"] = self.messaging_service_sid
+                else:
+                    kwargs["from_"] = self.sms_number
             else:
                 kwargs = {
                     "to": f"whatsapp:{to}",
