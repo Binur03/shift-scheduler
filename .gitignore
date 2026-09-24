@@ -25,3 +25,8 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Internal working documents — not for the public repo. AUDIT_REPORT.md
+# describes security weaknesses and their status, which is not something to
+# publish while any of them are still live.
+AUDIT_REPORT.md
