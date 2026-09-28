@@ -188,6 +188,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Salida',
         'Check out of your other shift first':
             'Primero registre la salida de su otro turno',
+        'Check the dates and how many people':
+            'Revise las fechas y cuántas personas',
         'Check-in / out':
             'Entrada / salida',
         'Check-in link':
@@ -282,6 +284,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Por orden de llegada: confirme abajo para asegurar su lugar.',
         'First name':
             'Nombre',
+        'For anything that did not come in by email. The time and headcount below apply to every date you pick.':
+            'Para lo que no llegó por correo. La hora y el número de personas de abajo se aplican a cada fecha que elija.',
         'For initial setup only. To add a schedule today, use the paste box above.':
             'Solo para la configuración inicial. Para agregar un horario hoy, use el cuadro de arriba.',
         'Fri':
@@ -438,6 +442,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Pegar un horario del correo',
         'Paste the date, number of people and start time above. Review the drafts before sending invitations.':
             'Pegue arriba la fecha, el número de personas y la hora de inicio. Revise los borradores antes de enviar las invitaciones.',
+        "Paste the schedule from the vendor's email":
+            'Pegue el horario del correo del proveedor',
         'People':
             'Personas',
         'Phone':
@@ -448,6 +454,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Elija inglés o español.',
         'Pick at least one date before creating.':
             'Elija al menos una fecha antes de crear.',
+        'Pick dates by hand':
+            'Elegir fechas a mano',
         'Pick exact dates or paste the schedule from an email.':
             'Elija las fechas exactas o pegue el horario de un correo.',
         'Pick shift dates':
@@ -502,6 +510,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Hable con su supervisor',
         'Select a job…':
             'Seleccione un trabajo…',
+        'Send it to the workers':
+            'Envíelo a los trabajadores',
         'Send the weekly schedule':
             'Enviar el horario semanal',
         'Send week to workers':
@@ -646,6 +656,10 @@ CATALOG: dict[str, dict[str, str]] = {
             'Los trabajadores envían IN al llegar (hasta 60 min antes) y OUT al salir.',
         'Workforce dispatch & scheduling':
             'Despacho y programación de personal',
+        'You get a text when the shift is covered':
+            'Recibirá un mensaje cuando el turno esté cubierto',
+        'You get a text when the shift is covered, and another if it still needs people.':
+            'Recibirá un mensaje cuando el turno esté cubierto, y otro si todavía faltan personas.',
         'You need a job before you can import a schedule.':
             'Necesita un trabajo antes de poder importar un horario.',
         'You need a job location before you can create shifts.':
@@ -656,6 +670,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Le invitamos a un turno',
         "You're marked as not available for this shift.":
             'Quedó marcado como no disponible para este turno.',
+        'Your PIN is the last 4 digits of your phone number.':
+            'Su PIN son los ultimos 4 digitos de su numero de telefono.',
         'Your PIN is usually the last 4 digits of your phone number. If that does not work, ask your supervisor to reset it. Do not share this link.':
             'Su PIN normalmente son los últimos 4 dígitos de su número de teléfono. Si no funciona, pida a su supervisor que lo restablezca. No comparta este enlace.',
         'Your first schedule, in three steps':

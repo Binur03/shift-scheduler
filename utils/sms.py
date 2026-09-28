@@ -408,7 +408,8 @@ class WhatsAppService:
             + translate("Location: {address}", lang, address=location_address) + "\n"
             + f"{date_text} {time_text}" + "\n\n"
             + (
-                translate("Check in when you arrive: {url}", lang, url=punch_url) + "\n\n"
+                translate("Check in when you arrive: {url}", lang, url=punch_url) + "\n"
+                + translate("Your PIN is the last 4 digits of your phone number.", lang) + "\n\n"
                 if punch_url else ""
             )
             + translate(
@@ -443,6 +444,7 @@ class WhatsAppService:
         accepted: int,
         required: int,
         admin_number: str | None = None,
+        shift_id: int | None = None,
     ) -> bool:
         """Alert the admin that one shift is understaffed.
 
@@ -455,11 +457,13 @@ class WhatsAppService:
             return False
         date_text = f"{work_date:%a %d %b}"
         time_text = format_shift_time(start_time, end_time)
+        # No emoji: a single non-GSM-7 character triples the segment count.
         body = (
-            f"⚠️ Staffing alert: {title} @ {location_address}\n"
-            f"{date_text} {time_text} — {accepted}/{required} confirmed "
-            f"(need {required - accepted} more).\n\n"
-            "Open the dashboard to adjust the schedule or re-dispatch."
+            f"{self._brand_prefix()}NEEDS WORKERS: {title}\n"
+            f"{date_text} {time_text}\n"
+            f"{location_address}\n"
+            f"{accepted} of {required} confirmed - need {required - accepted} more.\n"
+            + (f"Details: {self.base_url}/admin/shifts/{shift_id}" if shift_id else "")
         )
         return self._send(
             admin_number,
@@ -475,6 +479,40 @@ class WhatsAppService:
             },
             context="staffing alert",
         )
+
+    def send_shift_covered(
+        self,
+        *,
+        title: str,
+        location_address: str,
+        work_date: date,
+        start_time: time,
+        end_time: time | None,
+        required: int,
+        area: str | None = None,
+        shift_id: int | None = None,
+        admin_number: str | None = None,
+    ) -> bool:
+        """Tell the coordinator a shift just reached its headcount.
+
+        Without this the only signal is bad news, so silence means either
+        "everything is covered" or "the alerting is broken" -- and those look
+        identical right up until nobody turns up.
+        """
+        admin_number = admin_number or os.environ.get("ADMIN_WHATSAPP_NUMBER")
+        if not admin_number:
+            logger.error("ADMIN_WHATSAPP_NUMBER not set; cannot send admin alert.")
+            return False
+        date_text = f"{work_date:%a %d %b}"
+        body = (
+            f"{self._brand_prefix()}COVERED: {title}\n"
+            f"{date_text} {format_shift_time(start_time, end_time)}\n"
+            + (f"Area: {area}\n" if area else "")
+            + f"{location_address}\n"
+            f"All {required} spots confirmed.\n"
+            + (f"Details: {self.base_url}/admin/shifts/{shift_id}" if shift_id else "")
+        )
+        return self._send(admin_number, body=body, context="shift covered")
 
     def send_admin_alert(self, body: str, admin_number: str | None = None) -> bool:
         """Send a free-form WhatsApp alert to the admin (ADMIN_WHATSAPP_NUMBER).

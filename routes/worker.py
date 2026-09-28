@@ -89,6 +89,42 @@ def view_offer(token: str) -> Response | str:
     return render_template("worker/accept.html", assignment=assignment, shift=shift)
 
 
+class _Filled:
+    """Marks an acceptance that took the last seat, so the caller can notify
+    the coordinator once the transaction has committed."""
+
+    __slots__ = ("page",)
+
+    def __init__(self, page):
+        self.page = page
+
+
+def _notify_shift_covered(shift_id: int) -> None:
+    """Best-effort "this shift is covered" message to the coordinator.
+
+    Never raises: the worker's seat is already committed, and a messaging
+    failure must not turn a successful acceptance into an error page.
+    """
+    try:
+        shift = db.session.get(Shift, shift_id)
+        if shift is None:
+            return
+        from utils.sms import WhatsAppService
+
+        WhatsAppService().send_shift_covered(
+            title=shift.job.title,
+            location_address=shift.job.location_address,
+            work_date=shift.date,
+            start_time=shift.start_time,
+            end_time=shift.end_time,
+            required=shift.required_headcount,
+            area=shift.area,
+            shift_id=shift.id,
+        )
+    except Exception:  # noqa: BLE001 - notification is not worth a 500
+        logger.exception("Could not send the shift-covered notification.")
+
+
 @worker_bp.route("/accept/<token>", methods=["POST"])
 def accept_offer(token: str) -> Response | str | tuple[str, int]:
     """Atomically accept the shift if capacity remains.
@@ -121,17 +157,26 @@ def accept_offer(token: str) -> Response | str | tuple[str, int]:
 
         assignment.status = AssignmentStatus.accepted
         ensure_punch_token(assignment)
-        if count + 1 >= shift.required_headcount:
+        just_filled = count + 1 >= shift.required_headcount
+        if just_filled:
             shift.status = ShiftStatus.FILLED
         db.session.commit()
         logger.info("Assignment %s accepted for shift %s.", assignment_id, shift_id)
-        return render_template("worker/confirmed.html", assignment=assignment, shift=shift)
+        page = render_template("worker/confirmed.html", assignment=assignment, shift=shift)
+        return _Filled(page) if just_filled else page
 
     try:
-        return run_with_deadlock_retry(attempt, label=f"accept assignment={assignment_id}")
+        result = run_with_deadlock_retry(attempt, label=f"accept assignment={assignment_id}")
     except Exception:
         db.session.rollback()
         raise
+
+    if isinstance(result, _Filled):
+        # Outside the transaction and the row locks: a slow Twilio call here
+        # would otherwise block every other worker trying to accept.
+        _notify_shift_covered(shift_id)
+        return result.page
+    return result
 
 
 @worker_bp.route("/accept/<token>/check-in", methods=["POST"])

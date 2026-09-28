@@ -107,6 +107,7 @@ def check_understaffed_shifts(
             end_time=shift.end_time,
             accepted=shift.accepted_count,
             required=shift.required_headcount,
+            shift_id=shift.id,
         )
         if sent:
             shift.understaffed_alert_sent_at = now
