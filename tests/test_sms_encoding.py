@@ -173,6 +173,11 @@ class TestCatalogSmsStrings:
         "Reminder: you're confirmed for {title}",
         "Check in when you arrive: {url}",
         "If you can no longer make it, contact your coordinator ASAP.",
+        "Your PIN is the last 4 digits of your phone number.",
+        "Accept (first come, first served):",
+        "Reply STOP to opt out.",
+        "{count} new shifts available at {job}.",
+        "Tap to pick the days you can work:",
     ]
 
     def test_spanish_sms_strings_are_gsm7(self):

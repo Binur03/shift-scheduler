@@ -27,8 +27,9 @@ import logging
 from flask import Blueprint, Response, abort, jsonify, make_response, redirect, render_template, request, url_for
 
 from extensions import db, limiter
-from models import AssignmentStatus, Shift, ShiftAssignment, ShiftStatus, utcnow_naive
+from models import AssignmentStatus, Employee, Shift, ShiftAssignment, ShiftStatus, utcnow_naive
 from utils.assignments import lock_assignment_shift, locked_accepted_count
+from utils.claims import ClaimOutcome, claim_seat, release_seat
 from utils.i18n import use_worker_language
 from utils.punch import run_with_deadlock_retry
 from utils.web_punch import ensure_punch_token, shift_summary, web_punch
@@ -135,48 +136,29 @@ def accept_offer(token: str) -> Response | str | tuple[str, int]:
     initial = _load_assignment(token)
     assignment_id, shift_id = initial.id, initial.shift_id
 
-    def attempt():
-        assignment, shift = lock_assignment_shift(assignment_id, shift_id)
-        if shift.status not in (ShiftStatus.OPEN, ShiftStatus.FILLED) or not assignment.employee.is_active:
-            db.session.rollback()
-            return render_template("worker/closed.html", assignment=assignment, shift=shift)
-        if assignment.status == AssignmentStatus.accepted:
-            db.session.rollback()
-            return render_template("worker/confirmed.html", assignment=assignment, shift=shift)
-        if assignment.status != AssignmentStatus.pending:
-            db.session.rollback()
-            return render_template("worker/closed.html", assignment=assignment, shift=shift)
-
-        # A normal COUNT can read the snapshot from the initial token lookup
-        # under MySQL REPEATABLE READ. Locking reads see committed seats NOW.
-        count = locked_accepted_count(shift.id)
-        if count >= shift.required_headcount:
-            shift.status = ShiftStatus.FILLED
-            db.session.commit()
-            return render_template("worker/full.html", shift=shift), 409
-
-        assignment.status = AssignmentStatus.accepted
-        ensure_punch_token(assignment)
-        just_filled = count + 1 >= shift.required_headcount
-        if just_filled:
-            shift.status = ShiftStatus.FILLED
-        db.session.commit()
-        logger.info("Assignment %s accepted for shift %s.", assignment_id, shift_id)
-        page = render_template("worker/confirmed.html", assignment=assignment, shift=shift)
-        return _Filled(page) if just_filled else page
-
     try:
-        result = run_with_deadlock_retry(attempt, label=f"accept assignment={assignment_id}")
+        result = run_with_deadlock_retry(
+            lambda: claim_seat(assignment_id, shift_id),
+            label=f"accept assignment={assignment_id}",
+        )
     except Exception:
         db.session.rollback()
         raise
 
-    if isinstance(result, _Filled):
+    if result.outcome is ClaimOutcome.FULL:
+        return render_template("worker/full.html", shift=result.shift), 409
+    if result.outcome is ClaimOutcome.CLOSED:
+        return render_template(
+            "worker/closed.html", assignment=result.assignment, shift=result.shift
+        )
+
+    if result.just_filled:
         # Outside the transaction and the row locks: a slow Twilio call here
         # would otherwise block every other worker trying to accept.
         _notify_shift_covered(shift_id)
-        return result.page
-    return result
+    return render_template(
+        "worker/confirmed.html", assignment=result.assignment, shift=result.shift
+    )
 
 
 @worker_bp.route("/accept/<token>/check-in", methods=["POST"])
@@ -204,6 +186,110 @@ def open_check_in(token: str):
     except Exception:
         db.session.rollback()
         raise
+
+
+
+
+# --------------------------------------------------------------------------- #
+# Weekly portal: one link per worker instead of one text per shift
+# --------------------------------------------------------------------------- #
+def _load_worker(portal_token: str) -> Employee:
+    worker = (
+        Employee.query.filter_by(portal_token=portal_token).first()
+        if portal_token and len(portal_token) <= 64
+        else None
+    )
+    if worker is None or not worker.is_active:
+        abort(404)
+    use_worker_language(worker)
+    return worker
+
+
+def _portal_days(worker: Employee):
+    """Their offers and confirmed shifts, grouped by day, soonest first.
+
+    Past shifts are dropped: a worker opening the link on Friday should not
+    have to scroll through Monday to find tomorrow.
+    """
+    today = utcnow_naive().date()
+    rows = [
+        a for a in worker.assignments
+        if a.shift is not None
+        and a.shift.date >= today
+        and a.shift.status in (ShiftStatus.OPEN, ShiftStatus.FILLED)
+        and a.status in (AssignmentStatus.pending, AssignmentStatus.accepted)
+    ]
+    rows.sort(key=lambda a: (a.shift.date, a.shift.start_time))
+    days: list[tuple] = []
+    for a in rows:
+        if not days or days[-1][0] != a.shift.date:
+            days.append((a.shift.date, []))
+        days[-1][1].append(a)
+    return days
+
+
+@worker_bp.route("/my/<portal_token>", methods=["GET"])
+def portal(portal_token: str):
+    worker = _load_worker(portal_token)
+    return _private(make_response(render_template(
+        "worker/portal.html", worker=worker, days=_portal_days(worker),
+        just=request.args.get("just"), shift_id=request.args.get("shift", type=int),
+    )))
+
+
+@worker_bp.route("/my/<portal_token>/accept/<token>", methods=["POST"])
+def portal_accept(portal_token: str, token: str):
+    """Take one shift from the weekly list and come straight back to it."""
+    worker = _load_worker(portal_token)
+    assignment = _assignment_for(worker, token)
+
+    try:
+        result = run_with_deadlock_retry(
+            lambda: claim_seat(assignment.id, assignment.shift_id),
+            label=f"portal accept assignment={assignment.id}",
+        )
+    except Exception:
+        db.session.rollback()
+        raise
+
+    if result.just_filled:
+        _notify_shift_covered(assignment.shift_id)
+    outcome = {
+        ClaimOutcome.ACCEPTED: "accepted",
+        ClaimOutcome.ALREADY_ACCEPTED: "accepted",
+        ClaimOutcome.FULL: "full",
+    }.get(result.outcome, "closed")
+    return redirect(url_for("worker.portal", portal_token=portal_token,
+                            just=outcome, shift=assignment.shift_id))
+
+
+@worker_bp.route("/my/<portal_token>/decline/<token>", methods=["POST"])
+def portal_decline(portal_token: str, token: str):
+    worker = _load_worker(portal_token)
+    assignment = _assignment_for(worker, token)
+
+    try:
+        run_with_deadlock_retry(
+            lambda: release_seat(assignment.id, assignment.shift_id),
+            label=f"portal decline assignment={assignment.id}",
+        )
+    except Exception:
+        db.session.rollback()
+        raise
+    return redirect(url_for("worker.portal", portal_token=portal_token,
+                            just="declined", shift=assignment.shift_id))
+
+
+def _assignment_for(worker: Employee, token: str) -> ShiftAssignment:
+    """The worker's own assignment for this token, or 404.
+
+    Checking ownership stops one worker's portal link being used to answer
+    another worker's offer.
+    """
+    assignment = ShiftAssignment.query.filter_by(token=token).first()
+    if assignment is None or assignment.employee_id != worker.id:
+        abort(404)
+    return assignment
 
 
 @worker_bp.route("/decline/<token>", methods=["POST"])

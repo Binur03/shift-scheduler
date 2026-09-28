@@ -5,6 +5,7 @@ Every route is gated by the ``require_admin`` before_request hook below.
 """
 import csv
 import io
+import logging
 import secrets
 from datetime import date, datetime, timedelta
 
@@ -60,6 +61,8 @@ VENUE_TIMEZONES = [
 
 # A check-in this long after scheduled start is flagged "late" on timesheets.
 LATE_GRACE = timedelta(minutes=10)
+
+logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -688,6 +691,77 @@ def copy_week():
     return redirect(url_for("admin.list_shifts"))
 
 
+def _create_missing_assignments(shifts) -> int:
+    """Give every active worker a pending assignment on each shift.
+
+    Idempotent: a worker who already has one (pending, accepted or declined)
+    is left alone, so re-running a weekly send never duplicates or resets
+    anyone's answer.
+    """
+    active = Employee.query.filter_by(is_active=True).all()
+    created = 0
+    for shift in shifts:
+        # A draft is a vendor's suggestion, not a commitment: it must never
+        # reach a worker before someone approves it.
+        if shift.status != ShiftStatus.OPEN:
+            continue
+        existing = {a.employee_id for a in shift.assignments}
+        for employee in active:
+            if employee.id in existing:
+                continue
+            db.session.add(ShiftAssignment(
+                shift_id=shift.id, employee_id=employee.id,
+                status=AssignmentStatus.pending, token=secrets.token_urlsafe(16),
+            ))
+            created += 1
+    db.session.commit()
+    return created
+
+
+def _send_week_digests(shifts, service) -> tuple[int, int, list[str]]:
+    """One message per worker for the whole batch, not one per shift."""
+    from utils.web_punch import portal_url
+
+    # Queried fresh: shift.assignments was loaded before the new rows were
+    # created, so the cached relationship would report nothing to send.
+    shift_ids = [s.id for s in shifts if s.status == ShiftStatus.OPEN]
+    pending: dict[int, int] = {}
+    people: dict[int, Employee] = {}
+    if shift_ids:
+        rows = (
+            ShiftAssignment.query
+            .filter(ShiftAssignment.shift_id.in_(shift_ids),
+                    ShiftAssignment.status == AssignmentStatus.pending)
+            .all()
+        )
+        for a in rows:
+            if a.employee.is_active:
+                pending[a.employee_id] = pending.get(a.employee_id, 0) + 1
+                people[a.employee_id] = a.employee
+
+    job_title = shifts[0].job.title if shifts else ""
+    sent = failed = 0
+    failed_names: list[str] = []
+    for employee_id, count in pending.items():
+        employee = people[employee_id]
+        link = portal_url(service.base_url, employee)
+        db.session.commit()  # persist the freshly minted portal token
+        ok = service.send_week_digest(
+            employee.phone_number,
+            portal_url=link,
+            shift_count=count,
+            job_title=job_title,
+            lang=employee.language or "en",
+        )
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+            failed_names.append(employee.full_name)
+    logger.info("Week digest: sent=%d failed=%d", sent, failed)
+    return sent, failed, failed_names
+
+
 @admin_bp.route("/shifts/dispatch-week", methods=["POST"])
 def dispatch_week():
     """Dispatch every OPEN shift in a 7-day window in one click.
@@ -720,20 +794,15 @@ def dispatch_week():
         return redirect(url_for("admin.list_shifts"))
 
     service = WhatsAppService()
-    total_created = total_sent = total_failed = 0
-    all_failed_names: list[str] = []
-    for shift in shifts:
-        created, sent, failed, failed_names = _dispatch_one_shift(shift, service)
-        total_created += created
-        total_sent += sent
-        total_failed += failed
-        all_failed_names.extend(failed_names)
+    created = _create_missing_assignments(shifts)
+    sent, failed, failed_names = _send_week_digests(shifts, service)
 
     flash(
-        f"Week {week_start} – {week_end}: {len(shifts)} shift(s) dispatched.",
+        f"Week {week_start} – {week_end}: {len(shifts)} shift(s), "
+        f"{created} new invitation(s).",
         "info",
     )
-    _flash_dispatch_result(total_sent, total_failed, tuple(dict.fromkeys(all_failed_names)))
+    _flash_dispatch_result(sent, failed, tuple(dict.fromkeys(failed_names)))
     return redirect(url_for("admin.list_shifts"))
 
 

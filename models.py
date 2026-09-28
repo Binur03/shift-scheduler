@@ -150,6 +150,12 @@ class Employee(db.Model):
     language: Mapped[str] = mapped_column(
         String(5), nullable=False, default="en", server_default="en"
     )
+    # One private link per worker listing every shift they have been offered,
+    # so a week's schedule is a single text instead of one per shift. Issued
+    # lazily on first use, like punch_token.
+    portal_token: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
 
     assignments: Mapped[list["ShiftAssignment"]] = relationship(
         back_populates="employee",

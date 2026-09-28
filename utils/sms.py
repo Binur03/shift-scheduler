@@ -480,6 +480,36 @@ class WhatsAppService:
             context="staffing alert",
         )
 
+    def send_week_digest(
+        self,
+        phone: str,
+        *,
+        portal_url: str,
+        shift_count: int,
+        job_title: str,
+        lang: str = "en",
+    ) -> bool:
+        """Tell one worker a batch of shifts is waiting, with a single link.
+
+        Deliberately does not list the shifts: the point is to replace N
+        messages with one, and a list would grow the segment count back with
+        every shift in the week.
+        """
+        from utils.i18n import translate
+
+        body = (
+            self._brand_prefix()
+            + translate(
+                "{count} new shifts available at {job}.", lang,
+                count=shift_count, job=job_title,
+            )
+            + "\n"
+            + translate("Tap to pick the days you can work:", lang) + "\n"
+            + portal_url
+            + self._stop_suffix(lang)
+        )
+        return self._send(phone, body=body, context="week digest")
+
     def send_shift_covered(
         self,
         *,

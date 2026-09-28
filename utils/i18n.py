@@ -132,6 +132,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Activo',
         'Active workers':
             'Trabajadores activos',
+        "Actually, I can't":
+            'En realidad, no puedo',
         'Add a job':
             'Agregar un trabajo',
         'Add a worker':
@@ -292,6 +294,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'vie',
         'From':
             'Desde',
+        'Full':
+            'Lleno',
         'Fully staffed':
             'Completo',
         'Get directions':
@@ -302,10 +306,16 @@ CATALOG: dict[str, dict[str, str]] = {
             'Ir a la Bandeja de entrada',
         'Go to the Jobs page':
             'Ir a la página de Trabajos',
+        'Got it — that shift is yours.':
+            'Listo: ese turno es suyo.',
         'Hi {name}':
             'Hola {name}',
         "Hours from texted IN/OUT punches, in each venue's local time, with missing and late punches flagged.":
             'Horas de las marcas IN/OUT enviadas por mensaje, en la hora local de cada sede, con las marcas faltantes y tardías señaladas.',
+        'I can work this':
+            'Puedo trabajar este',
+        "I can't":
+            'No puedo',
         "I'm available — accept this shift":
             'Estoy disponible — acepto este turno',
         "I'm not available":
@@ -336,6 +346,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Trabajo, área o fecha',
         'Jobs':
             'Trabajos',
+        'Keep this link. It always shows your latest shifts.':
+            'Guarde este enlace. Siempre muestra sus turnos más recientes.',
         'Keep this private link to find your shift again.':
             'Guarde este enlace privado para volver a ver su turno.',
         'LINK NOT VALID':
@@ -372,6 +384,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Número de celular',
         'Mon':
             'lun',
+        'My shifts':
+            'Mis turnos',
         'NO CONNECTION · TRY AGAIN':
             'SIN CONEXIÓN · INTENTE OTRA VEZ',
         'NOT AVAILABLE':
@@ -408,6 +422,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Todavía no hay trabajos',
         'No matching shifts. Clear the search or choose All upcoming.':
             'No hay turnos que coincidan. Borre la búsqueda o elija Todos los próximos.',
+        "No problem — we've marked you as not available.":
+            'Sin problema: lo marcamos como no disponible.',
         'No schedules imported yet':
             'Todavía no se ha importado ningún horario',
         'No upcoming shifts':
@@ -416,6 +432,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Todavía no hay proveedores.',
         'No workers yet':
             'Todavía no hay trabajadores',
+        'Nothing to choose right now':
+            'No hay nada que elegir por ahora',
         'OUT':
             'SALIDA',
         'One shift per line, for example:':
@@ -460,6 +478,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Elija las fechas exactas o pegue el horario de un correo.',
         'Pick shift dates':
             'Elegir las fechas del turno',
+        'Pick the days you can work':
+            'Elija los días que puede trabajar',
         'Previous month':
             'Mes anterior',
         'Private link':
@@ -542,6 +562,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Iniciar sesión',
         'Sign in to the admin console':
             'Inicie sesión en la consola de administración',
+        'Someone got there first — that one is full.':
+            'Alguien llegó primero: ese turno ya está lleno.',
         'Something went wrong':
             'Algo salió mal',
         'Staffing':
@@ -562,8 +584,12 @@ CATALOG: dict[str, dict[str, str]] = {
             'DEMASIADOS INTENTOS',
         'TRY AGAIN':
             'REINTENTAR',
+        'Tap the green button on each day you can do. First come, first served.':
+            'Toque el botón verde en cada día que pueda. Por orden de llegada.',
         'Tap to accept (first come, first served):':
             'Toque para aceptar (por orden de llegada):',
+        'Tap to pick the days you can work:':
+            'Toque para elegir sus turnos:',
         'Thanks for your quick reply — keep an eye out for the next invite.':
             'Gracias por responder rápido. Esté pendiente de la próxima invitación.',
         'Thanks {name} — this spot is yours. See you there.':
@@ -632,6 +658,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Cuadrilla de almacén',
         'We hit an unexpected error. Please try again in a moment — if it keeps happening, contact your coordinator.':
             'Ocurrió un error inesperado. Intente de nuevo en un momento; si sigue pasando, comuníquese con su coordinador.',
+        "We'll text you when the next schedule comes in.":
+            'Le enviaremos un mensaje cuando llegue el próximo horario.',
         'Wed':
             'mié',
         'Week starting':
@@ -670,6 +698,8 @@ CATALOG: dict[str, dict[str, str]] = {
             'Le invitamos a un turno',
         "You're marked as not available for this shift.":
             'Quedó marcado como no disponible para este turno.',
+        "You're working this one":
+            'Usted trabaja este turno',
         'Your PIN is the last 4 digits of your phone number.':
             'Su PIN son los ultimos 4 digitos de su numero de telefono.',
         'Your PIN is usually the last 4 digits of your phone number. If that does not work, ask your supervisor to reset it. Do not share this link.':
@@ -700,12 +730,16 @@ CATALOG: dict[str, dict[str, str]] = {
             'esperando',
         'workforce dispatch & scheduling':
             'despacho y programación de personal',
+        '{count} new shifts available at {job}.':
+            '{count} turnos nuevos disponibles en {job}.',
         '{day} at {time}':
             '{day} a las {time}',
         '{name} will now get pages and texts in {language}.':
             '{name} recibirá las páginas y los mensajes en {language}.',
         '{n} no':
             '{n} no',
+        '{n} spots left':
+            'Quedan {n} lugares',
         '{n} waiting':
             '{n} esperando',
         '{n} yes':

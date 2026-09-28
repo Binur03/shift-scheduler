@@ -278,3 +278,18 @@ def _apply(employee_id: int, assignment: ShiftAssignment, action: str, now_utc: 
         "status": "checked_out",
         "time": format_local_clock(assignment.check_out_at_utc, tz),
     })
+
+
+def ensure_portal_token(employee) -> str:
+    """Give a worker their private weekly-schedule link (caller commits).
+
+    Minted on first use so the column can be added without a backfill, and so
+    a worker who is never dispatched to never gets a link at all.
+    """
+    if not employee.portal_token:
+        employee.portal_token = secrets.token_urlsafe(16)
+    return employee.portal_token
+
+
+def portal_url(base_url: str, employee) -> str:
+    return f"{base_url.rstrip('/')}/my/{ensure_portal_token(employee)}"
